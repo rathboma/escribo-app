@@ -13,9 +13,10 @@ I really loved Skitch. In fact, the pink Skitch arrows and dumbed-down text beca
 - **Annotate** with arrows, boxes, a highlighter, text labels and emoji
 - **Crop** to the part of the screenshot that matters
 - **Padding & fill** — add a margin around the shot, on a solid colour or gradient, or leave it transparent
-- **Aspect ratio & export size** — frame the output as 16:9, 4:3, 1:1 or 9:16 and export at ½×, 1×, 2× or any width
+- **Aspect ratio & export size** — frame the output as 16:9, 4:3, 1:1 or 9:16 and export at ½×, 1×, 2× or any width; the choice is remembered between launches
 - **Copy to clipboard** (or copy and close the window) or save to disk
-- Editable six-colour palette, light and dark themes, native window chrome on macOS, Windows and Linux
+- **Presets** — save the whole setup (palette, fill and padding, ratio, export size, watermark, label font) under a name, apply it in one click from the status bar, and import or export presets as JSON to share with your team
+- Editable six-colour palette and label font, light and dark themes, native window chrome on macOS, Windows and Linux
 
 ### Hotkeys
 

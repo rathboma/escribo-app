@@ -27,7 +27,13 @@ const DEFAULTS = {
   theme: 'dark',
   watermark: true,
   backdrop: 0,   // fill preset: 0 none, 1-4 solid, 5-8 gradient
-  pad: 0         // margin, % of the output width
+  pad: 0,        // margin, % of the output width
+  font: 'system',
+  ratio: 'orig',     // output aspect ratio
+  outScale: 1,       // export scale when no explicit width is set
+  outW: null,        // explicit export width, or null to follow outScale
+  presets: [],
+  activePreset: null
 };
 
 const EMOJIS = ['🔥', '👍', '👎', '🎉', '⚠️', '✅', '❌', '💡',
@@ -60,6 +66,15 @@ const SCALES = [
 const NONE_CHIP = 'linear-gradient(135deg,var(--sunken) 44%,var(--muted) 44%,var(--muted) 56%,var(--sunken) 56%)';
 const UI_FONT = '-apple-system, "Segoe UI", Cantarell, Ubuntu, system-ui, sans-serif';
 
+// Label fonts. Only families that exist offline everywhere, plus the bundled
+// brand script; anything else goes in as a custom family string.
+const FONTS = [
+  { id: 'system', label: 'System', family: UI_FONT },
+  { id: 'serif', label: 'Serif', family: 'Georgia, "Times New Roman", serif' },
+  { id: 'mono', label: 'Mono', family: 'Menlo, Consolas, "DejaVu Sans Mono", monospace' },
+  { id: 'script', label: 'Script', family: 'Cookie, cursive' }
+];
+
 /* ==========================================================================
    Settings (persisted)
    ========================================================================== */
@@ -74,6 +89,10 @@ function loadSettings() {
       const legacy = localStorage.getItem('watermark');
       if (legacy !== null) s.watermark = legacy === 'true';
     }
+    if (!Array.isArray(s.presets)) s.presets = [];
+    if (!RATIOS.some((r) => r.id === s.ratio)) s.ratio = DEFAULTS.ratio;
+    if (!SCALES.some((sc) => sc.k === s.outScale)) s.outScale = DEFAULTS.outScale;
+    s.outW = Number.isFinite(s.outW) ? clamp(Math.round(s.outW), 240, 8000) : null;
   } catch (err) {
     console.warn('Could not read saved settings', err);
   }
@@ -88,6 +107,7 @@ function saveSettings() {
   } catch (err) {
     console.warn('Could not save settings', err);
   }
+  syncPresetsUI();
 }
 
 /* ==========================================================================
@@ -100,10 +120,7 @@ const ui = {
   zoom: 0,
   prefsTab: 'annotate',
   pendingEmoji: null,
-  editingText: false,
-  ratio: 'orig',      // output aspect ratio, per session
-  outScale: 1,        // export scale when no explicit width is set
-  outW: null          // explicit export width, or null to follow outScale
+  editingText: false
 };
 
 let img = null;        // HTMLImageElement holding the full-resolution source
@@ -146,7 +163,13 @@ const el = {
   outW: $('#out-w'),
   outH: $('#out-h'),
   copyCaret: $('#copy-caret'),
-  copyMenu: $('#copy-menu')
+  copyMenu: $('#copy-menu'),
+  presetsBtn: $('#presets-btn'),
+  presetsPop: $('#presets-pop'),
+  presetsList: $('#presets-list'),
+  presetsLabel: $('#presets-label'),
+  presetForm: $('#preset-form'),
+  presetName: $('#preset-name')
 };
 
 const isDesktop = !!window.electronAPI;
@@ -214,7 +237,7 @@ function padFraction() {
 }
 
 function currentRatio() {
-  return RATIOS.find((r) => r.id === ui.ratio) || RATIOS[0];
+  return RATIOS.find((r) => r.id === settings.ratio) || RATIOS[0];
 }
 
 /**
@@ -330,7 +353,6 @@ function setSource(image, name) {
   document.title = `${name || 'Untitled'} — escribo`;
 
   ui.zoom = 0;
-  ui.outW = null;
   relayout();
   updateHint();
   canvas.clearHistory();
@@ -428,7 +450,7 @@ canvas.on('mouse:down', (opt) => {
       left: p.x,
       top: p.y,
       escTool: 'text',
-      fontFamily: 'sans-serif',
+      fontFamily: fontFamily(),
       fontSize: 22 * u,
       fill: color(),
       stroke: '#ffffff',
@@ -639,6 +661,52 @@ function resetHistoryBaseline() {
 /* ==========================================================================
    Colour palette
    ========================================================================== */
+
+function fontFamily(id = settings.font) {
+  const known = FONTS.find((f) => f.id === id);
+  return known ? known.family : (id || FONTS[0].family);
+}
+
+function setFont(id) {
+  settings.font = id || 'system';
+  // Like the swatches: a selected label takes the new font straight away.
+  const labels = canvas.getActiveObjects().filter((o) => o.escTool === 'text');
+  if (labels.length) {
+    labels.forEach((o) => o.set('fontFamily', fontFamily()));
+    canvas.requestRenderAll();
+    canvas.fire('object:modified');
+  }
+  saveSettings();
+  syncFontUI();
+}
+
+function renderFontPicker() {
+  const seg = $('#font-seg');
+  seg.innerHTML = '';
+  FONTS.forEach((f) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.dataset.font = f.id;
+    btn.textContent = f.label;
+    btn.style.fontFamily = f.family;
+    btn.addEventListener('click', () => setFont(f.id));
+    seg.appendChild(btn);
+  });
+  $('#font-custom').addEventListener('change', (e) => {
+    const value = e.target.value.trim();
+    setFont(value || 'system');
+    e.target.blur();
+  });
+}
+
+function syncFontUI() {
+  const known = FONTS.some((f) => f.id === settings.font);
+  document.querySelectorAll('#font-seg button').forEach((btn) => {
+    btn.setAttribute('aria-pressed', String(btn.dataset.font === settings.font));
+  });
+  const custom = $('#font-custom');
+  if (document.activeElement !== custom) custom.value = known ? '' : settings.font;
+}
 
 function applyColorToSelection(hex) {
   const objects = canvas.getActiveObjects();
@@ -859,8 +927,8 @@ function roundRectPath(ctx, x, y, w, h, r) {
  *  Scales are applied exactly — 1× is lossless and 2× an integer upscale —
  *  and only an explicit width makes it fractional. */
 function exportScale(layout = naturalLayout()) {
-  if (ui.outW == null) return ui.outScale;
-  return clamp(Math.round(ui.outW), 240, 8000) / layout.outW;
+  if (settings.outW == null) return settings.outScale;
+  return clamp(Math.round(settings.outW), 240, 8000) / layout.outW;
 }
 
 function exportWidth(layout = naturalLayout()) {
@@ -1148,7 +1216,8 @@ function renderRatioPop() {
     btn.textContent = r.label;
     btn.title = r.hint;
     btn.addEventListener('click', () => {
-      ui.ratio = r.id;
+      settings.ratio = r.id;
+      saveSettings();
       relayout();
     });
     el.ratioSeg.appendChild(btn);
@@ -1161,8 +1230,9 @@ function renderRatioPop() {
     btn.dataset.scale = String(sc.k);
     btn.textContent = sc.label;
     btn.addEventListener('click', () => {
-      ui.outScale = sc.k;
-      ui.outW = null;
+      settings.outScale = sc.k;
+      settings.outW = null;
+      saveSettings();
       syncRatioPop();
     });
     el.scaleSeg.appendChild(btn);
@@ -1189,10 +1259,11 @@ function syncRatioPop(layout) {
   el.scaleSeg.querySelectorAll('button').forEach((btn) => {
     const k = Number(btn.dataset.scale);
     btn.title = Math.round(L.outW * k) + 'px wide';
-    btn.setAttribute('aria-pressed', String(ui.outW == null && ui.outScale === k));
+    btn.setAttribute('aria-pressed', String(settings.outW == null && settings.outScale === k));
   });
   if (document.activeElement !== el.outW) el.outW.value = outW;
   el.outH.textContent = Math.max(1, Math.round((L.outH * outW) / L.outW));
+  syncPresetsUI();
 }
 
 function setTheme(theme) {
@@ -1205,6 +1276,253 @@ function setTheme(theme) {
 function setZoom(step) {
   ui.zoom = clamp(step, 0, MAX_ZOOM_STEPS);
   relayout();
+}
+
+/* ==========================================================================
+   Presets — a named snapshot of the whole setup, shareable as JSON
+   ========================================================================== */
+
+const PRESET_FILE_KIND = 'escribo-presets';
+
+const esc = (text) => String(text).replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+));
+
+const slug = (text) => String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'preset';
+
+const newId = () => 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+/** Everything a preset carries, read from the current state. */
+function presetValues() {
+  return {
+    palette: settings.palette.slice(),
+    defaultIdx: settings.defaultIdx,
+    solidBg: settings.solidBg.slice(),
+    gradBg: settings.gradBg.map((g) => ({ ...g })),
+    backdrop: settings.backdrop,
+    pad: settings.pad,
+    watermark: settings.watermark,
+    font: settings.font,
+    ratio: settings.ratio,
+    outScale: settings.outScale,
+    outW: settings.outW
+  };
+}
+
+const isHex = (v) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
+
+/** Keeps only fields a preset may set, each checked — imports are untrusted. */
+function sanitizeValues(v) {
+  const out = {};
+  if (!v || typeof v !== 'object') return out;
+  if (Array.isArray(v.palette) && v.palette.length === 6 && v.palette.every(isHex)) out.palette = v.palette.slice();
+  if (Number.isInteger(v.defaultIdx) && v.defaultIdx >= 0 && v.defaultIdx < 6) out.defaultIdx = v.defaultIdx;
+  if (Array.isArray(v.solidBg) && v.solidBg.length === 4 && v.solidBg.every(isHex)) out.solidBg = v.solidBg.slice();
+  if (Array.isArray(v.gradBg) && v.gradBg.length === 4 && v.gradBg.every((g) => g && isHex(g.a) && isHex(g.b))) {
+    out.gradBg = v.gradBg.map((g) => ({ a: g.a, b: g.b }));
+  }
+  if (Number.isInteger(v.backdrop) && v.backdrop >= 0 && v.backdrop <= 8) out.backdrop = v.backdrop;
+  if (typeof v.pad === 'number' && Number.isFinite(v.pad)) out.pad = clamp(Math.round(v.pad), 0, 18);
+  if (typeof v.watermark === 'boolean') out.watermark = v.watermark;
+  if (typeof v.font === 'string' && v.font.length <= 120) out.font = v.font;
+  if (RATIOS.some((r) => r.id === v.ratio)) out.ratio = v.ratio;
+  if (SCALES.some((sc) => sc.k === v.outScale)) out.outScale = v.outScale;
+  out.outW = Number.isFinite(v.outW) ? clamp(Math.round(v.outW), 240, 8000) : null;
+  return out;
+}
+
+function activePreset() {
+  return settings.presets.find((p) => p.id === settings.activePreset) || null;
+}
+
+/** True when the current setup differs from the preset in any field the
+ *  preset defines (an imported preset may leave some out). */
+function presetIsModified(preset) {
+  const want = sanitizeValues(preset.values);
+  const have = sanitizeValues(presetValues());
+  return Object.keys(want).some((key) => JSON.stringify(want[key]) !== JSON.stringify(have[key]));
+}
+
+/** Re-renders everything that reads settings, after a preset changes them. */
+function refreshFromSettings() {
+  ui.colorIdx = settings.defaultIdx;
+  renderPalette();
+  syncPaddingUI();
+  syncFontUI();
+  wmToggle.checked = settings.watermark;
+  document.body.classList.toggle('no-watermark', !settings.watermark);
+  if (!el.prefs.hidden) renderPrefs();
+  relayout();
+  syncPresetsUI();
+}
+
+function applyPreset(preset) {
+  const v = sanitizeValues(preset.values);
+  ['palette', 'defaultIdx', 'solidBg', 'gradBg', 'backdrop', 'pad', 'watermark', 'font'].forEach((key) => {
+    if (key in v) settings[key] = v[key];
+  });
+  if (v.ratio) settings.ratio = v.ratio;
+  if (v.outScale) settings.outScale = v.outScale;
+  settings.outW = v.outW;
+  settings.activePreset = preset.id;
+  saveSettings();
+  refreshFromSettings();
+  toast(`Applied “${preset.name}”`);
+}
+
+function savePreset(name) {
+  const preset = { id: newId(), name: name.trim().slice(0, 60), createdAt: new Date().toISOString(), values: presetValues() };
+  if (!preset.name) return;
+  settings.presets.push(preset);
+  settings.activePreset = preset.id;
+  saveSettings();
+  syncPresetsUI(true);
+  toast(`Saved “${preset.name}”`);
+}
+
+function updatePreset(preset) {
+  preset.values = presetValues();
+  preset.updatedAt = new Date().toISOString();
+  settings.activePreset = preset.id;
+  saveSettings();
+  syncPresetsUI(true);
+  toast(`Updated “${preset.name}”`);
+}
+
+function deletePreset(preset) {
+  settings.presets = settings.presets.filter((p) => p.id !== preset.id);
+  if (settings.activePreset === preset.id) settings.activePreset = null;
+  saveSettings();
+  syncPresetsUI(true);
+}
+
+function presetsFile(list) {
+  return JSON.stringify({
+    app: 'escribo',
+    kind: PRESET_FILE_KIND,
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    presets: list.map((p) => ({ id: p.id, name: p.name, createdAt: p.createdAt, updatedAt: p.updatedAt, values: p.values }))
+  }, null, 2);
+}
+
+async function exportPresets(list, suggestedName) {
+  if (!list.length) return toast('No presets to export');
+  const text = presetsFile(list);
+  const plural = list.length === 1 ? 'Preset' : 'Presets';
+
+  if (isDesktop && window.electronAPI.saveText) {
+    const result = await window.electronAPI.saveText(text, suggestedName);
+    if (result && result.success) toast(`${plural} exported`);
+    else if (result && result.error) toast('Could not export presets');
+    return;
+  }
+
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = suggestedName;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast(`${plural} exported`);
+}
+
+function importPresetsText(text) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (err) {
+    return toast('That file is not valid JSON');
+  }
+  const list = Array.isArray(data) ? data : (data && Array.isArray(data.presets) ? data.presets : null);
+  if (!list) return toast('No presets found in that file');
+
+  let count = 0;
+  list.forEach((p) => {
+    if (!p || typeof p.name !== 'string' || !p.values) return;
+    const clean = {
+      id: typeof p.id === 'string' && p.id.length <= 40 ? p.id : newId(),
+      name: p.name.trim().slice(0, 60) || 'Untitled',
+      createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date().toISOString(),
+      values: sanitizeValues(p.values)
+    };
+    const existing = settings.presets.findIndex((x) => x.id === clean.id);
+    if (existing >= 0) {
+      settings.presets[existing] = clean;
+    } else {
+      if (settings.presets.some((x) => x.name === clean.name)) clean.name += ' (imported)';
+      settings.presets.push(clean);
+    }
+    count++;
+  });
+
+  saveSettings();
+  syncPresetsUI(true);
+  toast(count ? `Imported ${count} preset${count === 1 ? '' : 's'}` : 'No usable presets in that file');
+}
+
+async function importPresets() {
+  if (isDesktop && window.electronAPI.openText) {
+    const result = await window.electronAPI.openText();
+    if (result && result.success) importPresetsText(result.text);
+    else if (result && result.error) toast('Could not read that file');
+    return;
+  }
+  $('#preset-file').click();
+}
+
+const ICON_UPDATE = '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"></path><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"></path></svg>';
+const ICON_EXPORT = '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"></path><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"></path></svg>';
+const ICON_DELETE = '<svg width="11" height="11" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"></path></svg>';
+
+/** The status-bar label always; the rows only while the menu is open (or when
+ *  asked), since the list is rebuilt from scratch. */
+function syncPresetsUI(rows = false) {
+  if (!el.presetsList) return;
+  const active = activePreset();
+  const modified = active ? presetIsModified(active) : false;
+  el.presetsLabel.textContent = active ? active.name + (modified ? ' •' : '') : 'Presets';
+  el.presetsBtn.title = active ? `Preset: ${active.name}${modified ? ' (modified)' : ''}` : 'Presets';
+  el.presetsBtn.classList.toggle('on', !!active);
+
+  if (!rows && el.presetsPop.hidden) return;
+
+  el.presetsList.innerHTML = '';
+  settings.presets.forEach((p) => {
+    const row = document.createElement('div');
+    row.className = 'preset-row';
+    row.setAttribute('role', 'option');
+    const isActive = p.id === settings.activePreset;
+    row.setAttribute('aria-selected', String(isActive));
+    row.innerHTML = `
+      <span class="dot"></span>
+      <button class="name" type="button" title="Apply “${esc(p.name)}”">${esc(p.name)}</button>
+      ${isActive && modified ? '<span class="tag">modified</span>' : ''}
+      <button class="row-btn" type="button" data-act="update" title="Update with the current settings">${ICON_UPDATE}</button>
+      <button class="row-btn" type="button" data-act="export" title="Export this preset">${ICON_EXPORT}</button>
+      <button class="row-btn danger" type="button" data-act="delete" title="Delete">${ICON_DELETE}</button>`;
+    row.querySelector('.name').addEventListener('click', () => applyPreset(p));
+    row.querySelector('[data-act="update"]').addEventListener('click', () => updatePreset(p));
+    row.querySelector('[data-act="export"]').addEventListener('click', () => exportPresets([p], `${slug(p.name)}.escribo-preset.json`));
+    row.querySelector('[data-act="delete"]').addEventListener('click', () => {
+      if (window.confirm(`Delete preset “${p.name}”?`)) deletePreset(p);
+    });
+    el.presetsList.appendChild(row);
+  });
+
+  $('#presets-empty').hidden = settings.presets.length > 0;
+  $('#presets-export').disabled = settings.presets.length === 0;
+}
+
+function openPresetForm() {
+  el.presetForm.hidden = false;
+  el.presetName.value = '';
+  el.presetName.focus();
+}
+
+function closePresetForm() {
+  el.presetForm.hidden = true;
+  el.presetName.value = '';
 }
 
 /* ==========================================================================
@@ -1387,7 +1705,8 @@ $('#prefs-reset').addEventListener('click', () => {
 const POPOVERS = [
   { name: 'backdrop', pop: el.backdropPop, btn: el.backdropBtn },
   { name: 'ratio', pop: el.ratioPop, btn: el.ratioBtn },
-  { name: 'copy', pop: el.copyMenu, btn: el.copyCaret }
+  { name: 'copy', pop: el.copyMenu, btn: el.copyCaret },
+  { name: 'presets', pop: el.presetsPop, btn: el.presetsBtn }
 ];
 
 function closePopovers(except) {
@@ -1410,6 +1729,30 @@ function closeBackdropPop() { closePopovers('__none__'); }
 function closeCopyMenu() { closePopovers('__none__'); }
 
 el.backdropBtn.addEventListener('click', () => togglePopover('backdrop'));
+el.presetsBtn.addEventListener('click', () => {
+  togglePopover('presets');
+  closePresetForm();
+  if (!el.presetsPop.hidden) syncPresetsUI(true);
+});
+
+$('#preset-new').addEventListener('click', openPresetForm);
+$('#preset-cancel').addEventListener('click', closePresetForm);
+$('#preset-save').addEventListener('click', () => {
+  if (!el.presetName.value.trim()) return el.presetName.focus();
+  savePreset(el.presetName.value);
+  closePresetForm();
+});
+el.presetName.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); $('#preset-save').click(); }
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePresetForm(); }
+});
+$('#presets-import').addEventListener('click', importPresets);
+$('#presets-export').addEventListener('click', () => exportPresets(settings.presets, 'escribo-presets.json'));
+$('#preset-file').addEventListener('change', function () {
+  const file = this.files && this.files[0];
+  if (file) file.text().then(importPresetsText);
+  this.value = null;
+});
 el.ratioBtn.addEventListener('click', () => togglePopover('ratio'));
 el.copyCaret.addEventListener('click', () => togglePopover('copy'));
 
@@ -1432,7 +1775,8 @@ document.querySelectorAll('#pad-range, #pad-range-prefs').forEach((input) => {
 });
 
 el.outW.addEventListener('change', (e) => {
-  ui.outW = clamp(Math.round(Number(e.target.value) || 0), 240, 8000);
+  settings.outW = clamp(Math.round(Number(e.target.value) || 0), 240, 8000);
+  saveSettings();
   syncRatioPop();
   e.target.blur();
 });
@@ -1598,6 +1942,9 @@ renderPalette();
 renderEmojiPicker();
 renderRatioPop();
 renderBackdropChips();
+renderFontPicker();
+syncFontUI();
+syncPresetsUI(true);
 setPrefsTab('annotate');
 
 // Shortcut labels follow the platform's modifier key.

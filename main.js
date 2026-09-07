@@ -187,6 +187,39 @@ app.whenReady().then(() => {
       return { success: false, error: error.message };
     }
   });
+
+  // Preset files: plain JSON through the native dialogs.
+  ipcMain.handle('save-text', async (event, text, suggestedName) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    try {
+      const { canceled, filePath } = await dialog.showSaveDialog(win, {
+        defaultPath: path.join(app.getPath('documents'), suggestedName || 'escribo-presets.json'),
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      });
+      if (canceled || !filePath) return { success: false, canceled: true };
+      await fs.promises.writeFile(filePath, String(text), 'utf8');
+      return { success: true, filePath };
+    } catch (error) {
+      console.error('Error saving file:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('open-text', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    try {
+      const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+        properties: ['openFile'],
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      });
+      if (canceled || !filePaths.length) return { success: false, canceled: true };
+      const text = await fs.promises.readFile(filePaths[0], 'utf8');
+      return { success: true, filePath: filePaths[0], text };
+    } catch (error) {
+      console.error('Error reading file:', error);
+      return { success: false, error: error.message };
+    }
+  });
 });
 
 app.on('window-all-closed', () => {

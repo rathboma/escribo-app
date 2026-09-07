@@ -166,6 +166,28 @@
 
         <!-- =========================== Status bar ============================ -->
         <div id="statusbar">
+            <div class="popover-anchor">
+                <button class="status-btn" id="presets-btn" title="Presets" aria-expanded="false">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.2 2.4 5.3 8 8.4l5.6-3.1z"></path><path d="M2.4 8.3 8 11.4l5.6-3.1" stroke-linecap="round"></path><path d="M2.4 11.2 8 14.3l5.6-3.1" stroke-linecap="round"></path></svg>
+                    <span id="presets-label">Presets</span>
+                </button>
+                <div id="presets-pop" class="popover left" hidden>
+                    <div class="pop-label">Presets</div>
+                    <div id="presets-list" role="listbox" aria-label="Presets"></div>
+                    <div class="pop-note" id="presets-empty">No presets yet. Save the current setup to reuse it, or share it with your team.</div>
+                    <div id="preset-form" hidden>
+                        <input type="text" id="preset-name" placeholder="Preset name" maxlength="60" aria-label="Preset name">
+                        <button id="preset-save" class="primary" type="button">Save</button>
+                        <button id="preset-cancel" type="button">Cancel</button>
+                    </div>
+                    <div class="preset-actions">
+                        <button id="preset-new" type="button">Save current as preset…</button>
+                        <button id="presets-import" type="button">Import…</button>
+                        <button id="presets-export" type="button">Export all</button>
+                    </div>
+                    <input type="file" id="preset-file" accept=".json,application/json" hidden>
+                </div>
+            </div>
             <span id="hint"></span>
             <div class="spacer"></div>
 
@@ -270,6 +292,10 @@
                         <div class="prefs-title">Annotation palette</div>
                         <div class="prefs-note">Six colours appear in the toolbar. The starred one is armed when a screenshot opens.</div>
                         <div class="pref-grid" id="palette-rows"></div>
+                        <div class="prefs-title font-title">Label font</div>
+                        <div class="prefs-note">Used for new text labels; a selected label changes too.</div>
+                        <div class="segmented" id="font-seg" role="group" aria-label="Label font"></div>
+                        <input type="text" id="font-custom" class="font-custom" placeholder="Or any installed font family, e.g. Inter" aria-label="Custom font family">
                     </section>
 
                     <section id="tab-backdrop" hidden>
