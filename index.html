@@ -172,9 +172,12 @@
                     <span id="presets-label">Presets</span>
                 </button>
                 <div id="presets-pop" class="popover left" hidden>
-                    <div class="pop-label">Presets</div>
+                    <div class="pop-head">
+                        <span class="pop-label">Presets</span>
+                        <button class="pop-link" id="presets-profile" type="button" title="Manage profiles">Default</button>
+                    </div>
                     <div id="presets-list" role="listbox" aria-label="Presets"></div>
-                    <div class="pop-note" id="presets-empty">No presets yet. Save the current setup to reuse it, or share it with your team.</div>
+                    <div class="pop-note" id="presets-empty">No presets in this profile yet. Save the current style — ratio, size, padding, fill, watermark — to reuse it, or share it with your team.</div>
                     <div id="preset-form" hidden>
                         <input type="text" id="preset-name" placeholder="Preset name" maxlength="60" aria-label="Preset name">
                         <button id="preset-save" class="primary" type="button">Save</button>
@@ -269,7 +272,7 @@
     <div id="prefs" hidden>
         <div id="prefs-panel" role="dialog" aria-modal="true" aria-label="Preferences">
             <div id="prefs-head">
-                <span>Preferences</span>
+                <span>Preferences<span id="prefs-profile" class="prefs-profile"></span></span>
                 <button class="close-btn" id="prefs-close" title="Close" aria-label="Close preferences">
                     <svg width="11" height="11" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"></path></svg>
                 </button>
@@ -284,6 +287,10 @@
                     <button class="prefs-tab" data-tab="backdrop" role="tab" aria-selected="false">
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.9" y="1.9" width="12.2" height="12.2" rx="2.4"></rect><rect x="4.7" y="4.7" width="6.6" height="6.6" rx="1.2"></rect></svg>
                         Padding fill
+                    </button>
+                    <button class="prefs-tab" data-tab="profiles" role="tab" aria-selected="false">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.2 2.4 5.3 8 8.4l5.6-3.1z"></path><path d="M2.4 8.3 8 11.4l5.6-3.1" stroke-linecap="round"></path><path d="M2.4 11.2 8 14.3l5.6-3.1" stroke-linecap="round"></path></svg>
+                        Profiles
                     </button>
                 </div>
 
@@ -311,6 +318,21 @@
                         <div class="pref-grid solid" id="solid-rows"></div>
                         <div class="pop-label">Fill — gradient</div>
                         <div class="pref-grid" id="grad-rows"></div>
+                    </section>
+
+                    <section id="tab-profiles" hidden>
+                        <div class="prefs-title">Profiles</div>
+                        <div class="prefs-note">A profile is the global kit — the annotation palette, padding fills and label font — and holds its own presets. The other tabs edit the active one. Export a profile to hand a teammate the whole setup.</div>
+                        <div id="profile-list" role="listbox" aria-label="Profiles"></div>
+                        <div id="profile-form" hidden>
+                            <input type="text" id="profile-name" placeholder="Profile name" maxlength="60" aria-label="Profile name">
+                            <button id="profile-form-save" class="primary" type="button">Create</button>
+                            <button id="profile-form-cancel" type="button">Cancel</button>
+                        </div>
+                        <div class="preset-actions profile-actions">
+                            <button id="profile-new" type="button">New profile…</button>
+                            <button id="profile-import" type="button">Import…</button>
+                        </div>
                     </section>
                 </div>
             </div>

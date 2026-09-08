@@ -14,7 +14,10 @@ const MAX_ZOOM_STEPS = 8;
 const SOLID_NAMES = ['Ink', 'Sand', 'Slate', 'Blush'];
 const GRAD_NAMES = ['Dusk', 'Rose', 'Sky', 'Mint'];
 
-const DEFAULTS = {
+// A profile is the global kit — annotation palette, padding fills, label
+// font — and owns the presets built on top of it. One profile is active at a
+// time; its fields are read through `settings` (see defineProfileAccessors).
+const PROFILE_DEFAULTS = {
   palette: ['#FF007F', '#FF3B30', '#FFB300', '#12B76A', '#2E7DFF', '#15151A'],
   defaultIdx: 0,
   solidBg: ['#101014', '#EFE7DC', '#3A4354', '#F7D6E4'],
@@ -24,15 +27,25 @@ const DEFAULTS = {
     { a: '#C6E2FF', b: '#7FAEFF' },
     { a: '#D9F5E8', b: '#8AD6B8' }
   ],
+  font: 'system'
+};
+const PROFILE_FIELDS = ['palette', 'defaultIdx', 'solidBg', 'gradBg', 'font', 'presets'];
+
+// A preset is a screenshot style: exactly these fields of the current state.
+const STYLE_FIELDS = ['ratio', 'outScale', 'outW', 'pad', 'backdrop', 'watermark'];
+
+const DEFAULTS = {
   theme: 'dark',
+  // the current style
   watermark: true,
-  backdrop: 0,   // fill preset: 0 none, 1-4 solid, 5-8 gradient
-  pad: 0,        // margin, % of the output width
-  font: 'system',
+  backdrop: 0,       // fill: 0 none, 1-4 solid, 5-8 gradient (the profile's fills)
+  pad: 0,            // margin, % of the output width
   ratio: 'orig',     // output aspect ratio
   outScale: 1,       // export scale when no explicit width is set
   outW: null,        // explicit export width, or null to follow outScale
-  presets: [],
+  // profiles, and what is active
+  profiles: [],
+  activeProfile: null,
   activePreset: null
 };
 
@@ -80,7 +93,7 @@ const FONTS = [
    ========================================================================== */
 
 function loadSettings() {
-  const s = { ...DEFAULTS, gradBg: DEFAULTS.gradBg.map(g => ({ ...g })) };
+  const s = { ...DEFAULTS };
   try {
     const raw = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
     if (raw) Object.assign(s, raw);
@@ -89,14 +102,37 @@ function loadSettings() {
       const legacy = localStorage.getItem('watermark');
       if (legacy !== null) s.watermark = legacy === 'true';
     }
-    if (!Array.isArray(s.presets)) s.presets = [];
-    if (!RATIOS.some((r) => r.id === s.ratio)) s.ratio = DEFAULTS.ratio;
-    if (!SCALES.some((sc) => sc.k === s.outScale)) s.outScale = DEFAULTS.outScale;
-    s.outW = Number.isFinite(s.outW) ? clamp(Math.round(s.outW), 240, 8000) : null;
   } catch (err) {
     console.warn('Could not read saved settings', err);
   }
+
+  // Profiles. Settings saved before profiles existed kept the palette,
+  // fills, font and presets at the top level — fold those into one profile.
+  const profiles = Array.isArray(s.profiles) ? s.profiles.map(sanitizeProfile).filter(Boolean) : [];
+  if (!profiles.length) profiles.push(newProfile('Default', s));
+  s.profiles = profiles;
+  if (!profiles.some((p) => p.id === s.activeProfile)) s.activeProfile = profiles[0].id;
+  PROFILE_FIELDS.forEach((key) => delete s[key]);
+  defineProfileAccessors(s);
+
+  // The current style, checked the way an imported preset is.
+  const style = sanitizeValues(s);
+  STYLE_FIELDS.forEach((key) => { s[key] = key in style ? style[key] : DEFAULTS[key]; });
   return s;
+}
+
+/** The active profile's fields read and write through `settings`, so the
+ *  rest of the app keeps its flat view of them. They are not enumerable:
+ *  the data is stored inside `profiles`, not again at the top level. */
+function defineProfileAccessors(s) {
+  const current = () => s.profiles.find((p) => p.id === s.activeProfile) || s.profiles[0];
+  PROFILE_FIELDS.forEach((key) => {
+    Object.defineProperty(s, key, {
+      get: () => current()[key],
+      set: (value) => { current()[key] = value; },
+      enumerable: false
+    });
+  });
 }
 
 const settings = loadSettings();
@@ -1279,99 +1315,107 @@ function setZoom(step) {
 }
 
 /* ==========================================================================
-   Presets — a named snapshot of the whole setup, shareable as JSON
+   Profiles & presets
+   A profile is the global kit (palette, fills, font) and owns its presets.
+   A preset is a screenshot style: ratio, export size, padding, fill and
+   watermark. Both travel as JSON so a team can share one file.
    ========================================================================== */
 
 const PRESET_FILE_KIND = 'escribo-presets';
+const PROFILE_FILE_KIND = 'escribo-profile';
 
-const esc = (text) => String(text).replace(/[&<>"']/g, (c) => (
-  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-));
-
-const slug = (text) => String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'preset';
-
-const newId = () => 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-
-/** Everything a preset carries, read from the current state. */
-function presetValues() {
-  return {
-    palette: settings.palette.slice(),
-    defaultIdx: settings.defaultIdx,
-    solidBg: settings.solidBg.slice(),
-    gradBg: settings.gradBg.map((g) => ({ ...g })),
-    backdrop: settings.backdrop,
-    pad: settings.pad,
-    watermark: settings.watermark,
-    font: settings.font,
-    ratio: settings.ratio,
-    outScale: settings.outScale,
-    outW: settings.outW
-  };
+function esc(text) {
+  return String(text).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
 }
 
-const isHex = (v) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
+function slug(text) {
+  return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'untitled';
+}
+
+function newId(prefix) {
+  return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function validId(id) {
+  return typeof id === 'string' && /^[\w-]{1,40}$/.test(id) ? id : null;
+}
+
+function isHex(v) {
+  return typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
+}
+
+function cleanName(name, fallback = 'Untitled') {
+  return String(name == null ? '' : name).trim().slice(0, 60) || fallback;
+}
+
+/* --- Presets: a screenshot style ------------------------------------------ */
+
+/** The current style — what a preset captures. */
+function presetValues() {
+  const out = {};
+  STYLE_FIELDS.forEach((key) => { out[key] = settings[key]; });
+  return out;
+}
 
 /** Keeps only fields a preset may set, each checked — imports are untrusted. */
 function sanitizeValues(v) {
   const out = {};
   if (!v || typeof v !== 'object') return out;
-  if (Array.isArray(v.palette) && v.palette.length === 6 && v.palette.every(isHex)) out.palette = v.palette.slice();
-  if (Number.isInteger(v.defaultIdx) && v.defaultIdx >= 0 && v.defaultIdx < 6) out.defaultIdx = v.defaultIdx;
-  if (Array.isArray(v.solidBg) && v.solidBg.length === 4 && v.solidBg.every(isHex)) out.solidBg = v.solidBg.slice();
-  if (Array.isArray(v.gradBg) && v.gradBg.length === 4 && v.gradBg.every((g) => g && isHex(g.a) && isHex(g.b))) {
-    out.gradBg = v.gradBg.map((g) => ({ a: g.a, b: g.b }));
-  }
-  if (Number.isInteger(v.backdrop) && v.backdrop >= 0 && v.backdrop <= 8) out.backdrop = v.backdrop;
-  if (typeof v.pad === 'number' && Number.isFinite(v.pad)) out.pad = clamp(Math.round(v.pad), 0, 18);
-  if (typeof v.watermark === 'boolean') out.watermark = v.watermark;
-  if (typeof v.font === 'string' && v.font.length <= 120) out.font = v.font;
   if (RATIOS.some((r) => r.id === v.ratio)) out.ratio = v.ratio;
   if (SCALES.some((sc) => sc.k === v.outScale)) out.outScale = v.outScale;
   out.outW = Number.isFinite(v.outW) ? clamp(Math.round(v.outW), 240, 8000) : null;
+  if (typeof v.pad === 'number' && Number.isFinite(v.pad)) out.pad = clamp(Math.round(v.pad), 0, 18);
+  if (Number.isInteger(v.backdrop) && v.backdrop >= 0 && v.backdrop <= 8) out.backdrop = v.backdrop;
+  if (typeof v.watermark === 'boolean') out.watermark = v.watermark;
   return out;
+}
+
+function sanitizePreset(p) {
+  if (!p || typeof p !== 'object' || typeof p.name !== 'string' || !p.values || typeof p.values !== 'object') return null;
+  const clean = {
+    id: validId(p.id) || newId('p'),
+    name: cleanName(p.name),
+    createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date().toISOString(),
+    values: sanitizeValues(p.values)
+  };
+  if (typeof p.updatedAt === 'string') clean.updatedAt = p.updatedAt;
+  return clean;
 }
 
 function activePreset() {
   return settings.presets.find((p) => p.id === settings.activePreset) || null;
 }
 
-/** True when the current setup differs from the preset in any field the
+/** True when the current style differs from the preset in any field the
  *  preset defines (an imported preset may leave some out). */
 function presetIsModified(preset) {
   const want = sanitizeValues(preset.values);
-  const have = sanitizeValues(presetValues());
+  const have = presetValues();
   return Object.keys(want).some((key) => JSON.stringify(want[key]) !== JSON.stringify(have[key]));
 }
 
-/** Re-renders everything that reads settings, after a preset changes them. */
-function refreshFromSettings() {
-  ui.colorIdx = settings.defaultIdx;
-  renderPalette();
+/** Re-renders everything that shows the current style. */
+function refreshStyleUI() {
   syncPaddingUI();
-  syncFontUI();
   wmToggle.checked = settings.watermark;
   document.body.classList.toggle('no-watermark', !settings.watermark);
-  if (!el.prefs.hidden) renderPrefs();
   relayout();
   syncPresetsUI();
 }
 
 function applyPreset(preset) {
   const v = sanitizeValues(preset.values);
-  ['palette', 'defaultIdx', 'solidBg', 'gradBg', 'backdrop', 'pad', 'watermark', 'font'].forEach((key) => {
-    if (key in v) settings[key] = v[key];
-  });
-  if (v.ratio) settings.ratio = v.ratio;
-  if (v.outScale) settings.outScale = v.outScale;
-  settings.outW = v.outW;
+  STYLE_FIELDS.forEach((key) => { if (key in v) settings[key] = v[key]; });
   settings.activePreset = preset.id;
   saveSettings();
-  refreshFromSettings();
+  refreshStyleUI();
   toast(`Applied “${preset.name}”`);
 }
 
 function savePreset(name) {
-  const preset = { id: newId(), name: name.trim().slice(0, 60), createdAt: new Date().toISOString(), values: presetValues() };
+  const preset = { id: newId('p'), name: cleanName(name, ''), createdAt: new Date().toISOString(), values: presetValues() };
   if (!preset.name) return;
   settings.presets.push(preset);
   settings.activePreset = preset.id;
@@ -1396,6 +1440,97 @@ function deletePreset(preset) {
   syncPresetsUI(true);
 }
 
+/* --- Profiles: the global kit --------------------------------------------- */
+
+/** A profile's options, each checked, with defaults filled in. */
+function sanitizeProfileValues(v) {
+  const d = PROFILE_DEFAULTS;
+  const src = v && typeof v === 'object' ? v : {};
+  return {
+    palette: Array.isArray(src.palette) && src.palette.length === 6 && src.palette.every(isHex)
+      ? src.palette.slice() : d.palette.slice(),
+    defaultIdx: Number.isInteger(src.defaultIdx) && src.defaultIdx >= 0 && src.defaultIdx < 6 ? src.defaultIdx : d.defaultIdx,
+    solidBg: Array.isArray(src.solidBg) && src.solidBg.length === 4 && src.solidBg.every(isHex)
+      ? src.solidBg.slice() : d.solidBg.slice(),
+    gradBg: Array.isArray(src.gradBg) && src.gradBg.length === 4 && src.gradBg.every((g) => g && isHex(g.a) && isHex(g.b))
+      ? src.gradBg.map((g) => ({ a: g.a, b: g.b })) : d.gradBg.map((g) => ({ ...g })),
+    font: typeof src.font === 'string' && src.font.trim() && src.font.length <= 120 ? src.font : d.font,
+    presets: Array.isArray(src.presets) ? src.presets.map(sanitizePreset).filter(Boolean) : []
+  };
+}
+
+function newProfile(name, values) {
+  return { id: newId('prof'), name: cleanName(name), createdAt: new Date().toISOString(), ...sanitizeProfileValues(values) };
+}
+
+function sanitizeProfile(p) {
+  if (!p || typeof p !== 'object' || typeof p.name !== 'string') return null;
+  const clean = {
+    id: validId(p.id) || newId('prof'),
+    name: cleanName(p.name),
+    createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date().toISOString(),
+    ...sanitizeProfileValues(p)
+  };
+  if (typeof p.updatedAt === 'string') clean.updatedAt = p.updatedAt;
+  return clean;
+}
+
+function activeProfile() {
+  return settings.profiles.find((p) => p.id === settings.activeProfile) || settings.profiles[0];
+}
+
+/** Re-renders everything that reads the active profile. The current style
+ *  stays as it is — only the kit around it changes. */
+function refreshProfileUI() {
+  ui.colorIdx = settings.defaultIdx;
+  renderPalette();
+  syncFontUI();
+  syncPaddingUI();
+  if (!el.prefs.hidden) renderPrefs();
+  relayout();
+  syncPresetsUI(true);
+}
+
+function setActiveProfile(id) {
+  const profile = settings.profiles.find((p) => p.id === id);
+  if (!profile || profile.id === settings.activeProfile) return;
+  settings.activeProfile = profile.id;
+  saveSettings();
+  refreshProfileUI();
+  toast(`Switched to “${profile.name}”`);
+}
+
+function createProfile(name, from = null) {
+  const profile = from ? newProfile(name, from) : newProfile(name, PROFILE_DEFAULTS);
+  // A copy gets its own presets, not shared ids with the original.
+  profile.presets = profile.presets.map((p) => ({ ...p, id: newId('p'), values: { ...p.values } }));
+  settings.profiles.push(profile);
+  settings.activeProfile = profile.id;
+  saveSettings();
+  refreshProfileUI();
+  toast(from ? `Duplicated as “${profile.name}”` : `Created “${profile.name}”`);
+}
+
+function renameProfile(profile, name) {
+  const next = cleanName(name, '');
+  if (!next) return;
+  profile.name = next;
+  profile.updatedAt = new Date().toISOString();
+  saveSettings();
+  refreshProfileUI();
+}
+
+function deleteProfile(profile) {
+  if (settings.profiles.length <= 1) return toast('Keep at least one profile');
+  settings.profiles = settings.profiles.filter((p) => p.id !== profile.id);
+  if (settings.activeProfile === profile.id) settings.activeProfile = settings.profiles[0].id;
+  saveSettings();
+  refreshProfileUI();
+  toast(`Deleted “${profile.name}”`);
+}
+
+/* --- Files: export & import ----------------------------------------------- */
+
 function presetsFile(list) {
   return JSON.stringify({
     app: 'escribo',
@@ -1406,15 +1541,21 @@ function presetsFile(list) {
   }, null, 2);
 }
 
-async function exportPresets(list, suggestedName) {
-  if (!list.length) return toast('No presets to export');
-  const text = presetsFile(list);
-  const plural = list.length === 1 ? 'Preset' : 'Presets';
+function profileFile(profile) {
+  return JSON.stringify({
+    app: 'escribo',
+    kind: PROFILE_FILE_KIND,
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    profile: sanitizeProfile(profile)
+  }, null, 2);
+}
 
+async function exportJson(text, suggestedName, label) {
   if (isDesktop && window.electronAPI.saveText) {
     const result = await window.electronAPI.saveText(text, suggestedName);
-    if (result && result.success) toast(`${plural} exported`);
-    else if (result && result.error) toast('Could not export presets');
+    if (result && result.success) toast(`${label} exported`);
+    else if (result && result.error) toast(`Could not export ${label.toLowerCase()}`);
     return;
   }
 
@@ -1424,28 +1565,57 @@ async function exportPresets(list, suggestedName) {
   link.download = suggestedName;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  toast(`${plural} exported`);
+  toast(`${label} exported`);
 }
 
-function importPresetsText(text) {
+function exportPresets(list, suggestedName) {
+  if (!list.length) return toast('No presets to export');
+  return exportJson(presetsFile(list), suggestedName, list.length === 1 ? 'Preset' : 'Presets');
+}
+
+function exportProfile(profile) {
+  return exportJson(profileFile(profile), `${slug(profile.name)}.escribo-profile.json`, 'Profile');
+}
+
+/** Reads any escribo file: a profile (with its presets) or a list of presets.
+ *  A profile is added and switched to; presets join the active profile. */
+function importText(text) {
   let data;
   try {
     data = JSON.parse(text);
   } catch (err) {
     return toast('That file is not valid JSON');
   }
+  if (data && typeof data === 'object' && (data.kind === PROFILE_FILE_KIND || (data.profile && typeof data.profile === 'object'))) {
+    return importProfile(data.profile);
+  }
   const list = Array.isArray(data) ? data : (data && Array.isArray(data.presets) ? data.presets : null);
-  if (!list) return toast('No presets found in that file');
+  if (!list) return toast('No presets or profile found in that file');
+  importPresetList(list);
+}
 
+function importProfile(raw) {
+  const clean = sanitizeProfile(raw);
+  if (!clean) return toast('No usable profile in that file');
+  const existing = settings.profiles.findIndex((p) => p.id === clean.id);
+  if (existing >= 0) {
+    settings.profiles[existing] = clean;
+  } else {
+    if (settings.profiles.some((p) => p.name === clean.name)) clean.name += ' (imported)';
+    settings.profiles.push(clean);
+  }
+  settings.activeProfile = clean.id;
+  saveSettings();
+  refreshProfileUI();
+  const n = clean.presets.length;
+  toast(`Imported profile “${clean.name}” with ${n} preset${n === 1 ? '' : 's'}`);
+}
+
+function importPresetList(list) {
   let count = 0;
-  list.forEach((p) => {
-    if (!p || typeof p.name !== 'string' || !p.values) return;
-    const clean = {
-      id: typeof p.id === 'string' && p.id.length <= 40 ? p.id : newId(),
-      name: p.name.trim().slice(0, 60) || 'Untitled',
-      createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date().toISOString(),
-      values: sanitizeValues(p.values)
-    };
+  list.forEach((raw) => {
+    const clean = sanitizePreset(raw);
+    if (!clean) return;
     const existing = settings.presets.findIndex((x) => x.id === clean.id);
     if (existing >= 0) {
       settings.presets[existing] = clean;
@@ -1458,32 +1628,40 @@ function importPresetsText(text) {
 
   saveSettings();
   syncPresetsUI(true);
-  toast(count ? `Imported ${count} preset${count === 1 ? '' : 's'}` : 'No usable presets in that file');
+  toast(count ? `Imported ${count} preset${count === 1 ? '' : 's'} into “${activeProfile().name}”` : 'No usable presets in that file');
 }
 
-async function importPresets() {
+async function importFile() {
   if (isDesktop && window.electronAPI.openText) {
     const result = await window.electronAPI.openText();
-    if (result && result.success) importPresetsText(result.text);
+    if (result && result.success) importText(result.text);
     else if (result && result.error) toast('Could not read that file');
     return;
   }
   $('#preset-file').click();
 }
 
+/* --- UI: the presets menu and the Profiles tab ---------------------------- */
+
 const ICON_UPDATE = '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"></path><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"></path></svg>';
 const ICON_EXPORT = '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"></path><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"></path></svg>';
 const ICON_DELETE = '<svg width="11" height="11" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"></path></svg>';
+const ICON_RENAME = '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"></path></svg>';
+const ICON_DUPLICATE = '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H6zM2 5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1h1v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1v1H2z"></path></svg>';
 
-/** The status-bar label always; the rows only while the menu is open (or when
- *  asked), since the list is rebuilt from scratch. */
+/** The status-bar label and profile name always; the rows only while the
+ *  menu is open (or when asked), since the list is rebuilt from scratch. */
 function syncPresetsUI(rows = false) {
   if (!el.presetsList) return;
+  const profile = activeProfile();
   const active = activePreset();
   const modified = active ? presetIsModified(active) : false;
   el.presetsLabel.textContent = active ? active.name + (modified ? ' •' : '') : 'Presets';
   el.presetsBtn.title = active ? `Preset: ${active.name}${modified ? ' (modified)' : ''}` : 'Presets';
   el.presetsBtn.classList.toggle('on', !!active);
+  $('#presets-profile').textContent = profile.name;
+  $('#presets-profile').title = `Profile “${profile.name}” — manage profiles`;
+  $('#prefs-profile').textContent = profile.name;
 
   if (!rows && el.presetsPop.hidden) return;
 
@@ -1498,7 +1676,7 @@ function syncPresetsUI(rows = false) {
       <span class="dot"></span>
       <button class="name" type="button" title="Apply “${esc(p.name)}”">${esc(p.name)}</button>
       ${isActive && modified ? '<span class="tag">modified</span>' : ''}
-      <button class="row-btn" type="button" data-act="update" title="Update with the current settings">${ICON_UPDATE}</button>
+      <button class="row-btn" type="button" data-act="update" title="Update with the current style">${ICON_UPDATE}</button>
       <button class="row-btn" type="button" data-act="export" title="Export this preset">${ICON_EXPORT}</button>
       <button class="row-btn danger" type="button" data-act="delete" title="Delete">${ICON_DELETE}</button>`;
     row.querySelector('.name').addEventListener('click', () => applyPreset(p));
@@ -1523,6 +1701,64 @@ function openPresetForm() {
 function closePresetForm() {
   el.presetForm.hidden = true;
   el.presetName.value = '';
+}
+
+function renderProfileRows() {
+  const list = $('#profile-list');
+  list.innerHTML = '';
+  const last = settings.profiles.length <= 1;
+  settings.profiles.forEach((p) => {
+    const row = document.createElement('div');
+    row.className = 'preset-row profile-row';
+    row.setAttribute('role', 'option');
+    row.setAttribute('aria-selected', String(p.id === settings.activeProfile));
+    const n = p.presets.length;
+    row.innerHTML = `
+      <span class="dot"></span>
+      <button class="name" type="button" title="Switch to “${esc(p.name)}”">${esc(p.name)}</button>
+      <span class="tag">${n} preset${n === 1 ? '' : 's'}</span>
+      <button class="row-btn" type="button" data-act="rename" title="Rename">${ICON_RENAME}</button>
+      <button class="row-btn" type="button" data-act="duplicate" title="Duplicate">${ICON_DUPLICATE}</button>
+      <button class="row-btn" type="button" data-act="export" title="Export this profile, presets included">${ICON_EXPORT}</button>
+      <button class="row-btn danger" type="button" data-act="delete" title="${last ? 'Keep at least one profile' : 'Delete'}"${last ? ' disabled' : ''}>${ICON_DELETE}</button>`;
+    row.querySelector('.name').addEventListener('click', () => setActiveProfile(p.id));
+    row.querySelector('[data-act="rename"]').addEventListener('click', () => openProfileForm('rename', p));
+    row.querySelector('[data-act="duplicate"]').addEventListener('click', () => openProfileForm('duplicate', p));
+    row.querySelector('[data-act="export"]').addEventListener('click', () => exportProfile(p));
+    row.querySelector('[data-act="delete"]').addEventListener('click', () => {
+      if (window.confirm(`Delete profile “${p.name}” and its ${n} preset${n === 1 ? '' : 's'}?`)) deleteProfile(p);
+    });
+    list.appendChild(row);
+  });
+}
+
+let profileForm = null;   // { mode: 'new' | 'rename' | 'duplicate', target }
+
+function openProfileForm(mode, target = null) {
+  profileForm = { mode, target };
+  const input = $('#profile-name');
+  $('#profile-form').hidden = false;
+  input.value = mode === 'rename' ? target.name : mode === 'duplicate' ? `${target.name} copy` : '';
+  $('#profile-form-save').textContent = mode === 'rename' ? 'Rename' : mode === 'duplicate' ? 'Duplicate' : 'Create';
+  input.focus();
+  input.select();
+}
+
+function closeProfileForm() {
+  profileForm = null;
+  $('#profile-form').hidden = true;
+  $('#profile-name').value = '';
+}
+
+function submitProfileForm() {
+  if (!profileForm) return;
+  const input = $('#profile-name');
+  const name = input.value.trim();
+  if (!name) return input.focus();
+  const { mode, target } = profileForm;
+  if (mode === 'rename') renameProfile(target, name);
+  else createProfile(name, mode === 'duplicate' ? target : null);
+  closeProfileForm();
 }
 
 /* ==========================================================================
@@ -1605,6 +1841,8 @@ function renderPrefs() {
     });
     gradRows.appendChild(row);
   });
+
+  renderProfileRows();
 }
 
 function setPrefsTab(tab) {
@@ -1614,16 +1852,20 @@ function setPrefsTab(tab) {
   });
   $('#tab-annotate').hidden = tab !== 'annotate';
   $('#tab-backdrop').hidden = tab !== 'backdrop';
+  $('#tab-profiles').hidden = tab !== 'profiles';
+  if (tab !== 'profiles') closeProfileForm();
 }
 
-function openPrefs() {
+function openPrefs(tab) {
   closeBackdropPop();
   renderPrefs();
+  if (typeof tab === 'string') setPrefsTab(tab);   // also used directly as a click handler
   el.prefs.hidden = false;
 }
 
 function closePrefs() {
   el.prefs.hidden = true;
+  closeProfileForm();
 }
 
 /* ==========================================================================
@@ -1683,16 +1925,12 @@ document.querySelectorAll('.prefs-tab').forEach((btn) => {
 });
 
 $('#prefs-reset').addEventListener('click', () => {
-  settings.palette = DEFAULTS.palette.slice();
-  settings.defaultIdx = DEFAULTS.defaultIdx;
-  settings.solidBg = DEFAULTS.solidBg.slice();
-  settings.gradBg = DEFAULTS.gradBg.map((g) => ({ ...g }));
-  ui.colorIdx = DEFAULTS.defaultIdx;
+  // The active profile's kit goes back to stock; its presets stay.
+  const fresh = sanitizeProfileValues(PROFILE_DEFAULTS);
+  ['palette', 'defaultIdx', 'solidBg', 'gradBg', 'font'].forEach((key) => { settings[key] = fresh[key]; });
   saveSettings();
-  renderPrefs();
-  renderPalette();
-  syncPaddingUI();
-  relayout();
+  refreshProfileUI();
+  toast(`Restored the default colours and font for “${activeProfile().name}”`);
 });
 
 /* --- Popovers ------------------------------------------------------------
@@ -1746,12 +1984,25 @@ el.presetName.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); $('#preset-save').click(); }
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePresetForm(); }
 });
-$('#presets-import').addEventListener('click', importPresets);
-$('#presets-export').addEventListener('click', () => exportPresets(settings.presets, 'escribo-presets.json'));
+$('#presets-import').addEventListener('click', importFile);
+$('#presets-export').addEventListener('click', () => exportPresets(settings.presets, `${slug(activeProfile().name)}.escribo-presets.json`));
 $('#preset-file').addEventListener('change', function () {
   const file = this.files && this.files[0];
-  if (file) file.text().then(importPresetsText);
+  if (file) file.text().then(importText);
   this.value = null;
+});
+$('#presets-profile').addEventListener('click', () => {
+  closePopovers();
+  openPrefs('profiles');
+});
+
+$('#profile-new').addEventListener('click', () => openProfileForm('new'));
+$('#profile-import').addEventListener('click', importFile);
+$('#profile-form-save').addEventListener('click', submitProfileForm);
+$('#profile-form-cancel').addEventListener('click', closeProfileForm);
+$('#profile-name').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); submitProfileForm(); }
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeProfileForm(); }
 });
 el.ratioBtn.addEventListener('click', () => togglePopover('ratio'));
 el.copyCaret.addEventListener('click', () => togglePopover('copy'));
