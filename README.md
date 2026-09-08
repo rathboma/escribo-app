@@ -16,7 +16,8 @@ I really loved Skitch. In fact, the pink Skitch arrows and dumbed-down text beca
 - **Aspect ratio & export size** — frame the output as 16:9, 4:3, 1:1 or 9:16 and export at ½×, 1×, 2× or any width; the choice is remembered between launches
 - **Copy to clipboard** (or copy and close the window) or save to disk
 - **Presets** — a screenshot style (aspect ratio, export size, padding, fill, watermark) saved under a name and applied in one click from the status bar
-- **Profiles** — the global kit: annotation palette, padding fills and label font, plus the presets built on it. Switch profiles in Preferences; import or export a profile (presets included) or a set of presets as JSON to share with your team
+- **Profiles** — the global kit: annotation palette, padding fills, label font and advanced screenshot styling (corner rounding, drop shadow, annotation size), plus the presets built on it. Switch profiles in Preferences; import or export a profile (presets included) or a set of presets as JSON to share with your team
+- **Advanced tab** — fine control over screenshot corner rounding, drop shadow and default annotation size, for teams who want more than the defaults
 - Light and dark themes, native window chrome on macOS, Windows and Linux
 
 ### Hotkeys

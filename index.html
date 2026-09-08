@@ -288,6 +288,10 @@
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.9" y="1.9" width="12.2" height="12.2" rx="2.4"></rect><rect x="4.7" y="4.7" width="6.6" height="6.6" rx="1.2"></rect></svg>
                         Padding fill
                     </button>
+                    <button class="prefs-tab" data-tab="advanced" role="tab" aria-selected="false">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 1v2.2M8 12.8V15M15 8h-2.2M3.2 8H1M12.6 3.4l-1.55 1.55M4.95 11.05 3.4 12.6M12.6 12.6l-1.55-1.55M4.95 4.95 3.4 3.4" stroke-linecap="round"></path><circle cx="8" cy="8" r="3"></circle></svg>
+                        Advanced
+                    </button>
                     <button class="prefs-tab" data-tab="profiles" role="tab" aria-selected="false">
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.2 2.4 5.3 8 8.4l5.6-3.1z"></path><path d="M2.4 8.3 8 11.4l5.6-3.1" stroke-linecap="round"></path><path d="M2.4 11.2 8 14.3l5.6-3.1" stroke-linecap="round"></path></svg>
                         Profiles
@@ -320,9 +324,15 @@
                         <div class="pref-grid" id="grad-rows"></div>
                     </section>
 
+                    <section id="tab-advanced" hidden>
+                        <div class="prefs-title">Advanced</div>
+                        <div class="prefs-note">Fine control over details that are normally left at their defaults — screenshot corner rounding and drop shadow, and the size of new annotations. Part of the profile, so it travels with it.</div>
+                        <div id="advanced-rows"></div>
+                    </section>
+
                     <section id="tab-profiles" hidden>
                         <div class="prefs-title">Profiles</div>
-                        <div class="prefs-note">A profile is the global kit — the annotation palette, padding fills and label font — and holds its own presets. The other tabs edit the active one. Export a profile to hand a teammate the whole setup.</div>
+                        <div class="prefs-note">A profile is the global kit — the annotation palette, padding fills, label font and advanced style — and holds its own presets. The other tabs edit the active one. Export a profile to hand a teammate the whole setup.</div>
                         <div id="profile-list" role="listbox" aria-label="Profiles"></div>
                         <div id="profile-form" hidden>
                             <input type="text" id="profile-name" placeholder="Profile name" maxlength="60" aria-label="Profile name">
