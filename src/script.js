@@ -92,16 +92,28 @@ const FONTS = [
    Settings (persisted)
    ========================================================================== */
 
+// Settings that were saved to localStorage before the switch to
+// electron-store. Read once so nothing is lost when a user upgrades; after
+// the first save everything lives in electron-store's JSON file instead.
+function migrateLegacySettings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    if (raw) return raw;
+    // Carry over the standalone watermark flag used before the redesign.
+    const legacy = localStorage.getItem('watermark');
+    if (legacy !== null) return { watermark: legacy === 'true' };
+  } catch (err) {
+    console.warn('Could not read legacy settings', err);
+  }
+  return null;
+}
+
 function loadSettings() {
   const s = { ...DEFAULTS };
   try {
-    const raw = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    const stored = window.electronAPI.getSettings();
+    const raw = stored && Object.keys(stored).length ? stored : migrateLegacySettings();
     if (raw) Object.assign(s, raw);
-    else {
-      // Carry over the standalone watermark flag used before the redesign.
-      const legacy = localStorage.getItem('watermark');
-      if (legacy !== null) s.watermark = legacy === 'true';
-    }
   } catch (err) {
     console.warn('Could not read saved settings', err);
   }
@@ -139,7 +151,9 @@ const settings = loadSettings();
 
 function saveSettings() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(settings));
+    // Serialize to a plain object first: the profile fields are non-enumerable
+    // accessors, and this matches what JSON.stringify persisted before.
+    window.electronAPI.saveSettings(JSON.parse(JSON.stringify(settings)));
   } catch (err) {
     console.warn('Could not save settings', err);
   }

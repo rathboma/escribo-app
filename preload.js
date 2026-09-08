@@ -6,5 +6,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveImage: (dataUrl, suggestedName) => ipcRenderer.invoke('save-image', dataUrl, suggestedName),
   saveText: (text, suggestedName) => ipcRenderer.invoke('save-text', text, suggestedName),
   openText: () => ipcRenderer.invoke('open-text'),
-  window: (action) => ipcRenderer.send('window-control', action)
+  window: (action) => ipcRenderer.send('window-control', action),
+  // Persisted settings, backed by electron-store in the main process.
+  getSettings: () => ipcRenderer.sendSync('settings-get'),
+  saveSettings: (data) => ipcRenderer.sendSync('settings-set', data)
 });
