@@ -466,8 +466,10 @@ html[data-platform="win32"] .ico-linux { display: none; }
 
 body:not(.is-desktop) #copy-menu-close { display: none; }
 
-/* Responsive: shed labels before anything overflows. */
-@media (max-width: 1019px) {
+/* Responsive: shed labels before anything overflows. The breakpoint has to
+   stay ahead of the toolbar's own width with every label showing — about
+   1140px in the widest of the system fonts it can land in. */
+@media (max-width: 1179px) {
   .tool-btn { padding: 0; }
   .tool-btn .label { display: none; }
 }
