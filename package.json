@@ -1,7 +1,12 @@
 {
   "name": "pinkarrows",
+  "productName": "escribo",
   "version": "1.0.0",
+  "description": "Annotate screenshots with arrows, boxes, highlights and text.",
   "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
   "repository": "git@github.com:rathboma/pinkarrows.git",
   "author": "Matthew Rathbone <matthew.rathbone@gmail.com>",
   "license": "MIT",

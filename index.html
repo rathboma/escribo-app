@@ -1,201 +1,359 @@
 <!DOCTYPE html>
-<html>
+<html lang="en" data-theme="dark">
 
 <head>
-    <title>Pink Arrows - Add text and draw on images, screenshots and screen captures</title>
-    <meta name="description"
-        content="Drag and drop an image, and add text, shapes, blurs, to the image. Free and simple to use." />
-    <link rel="canonical" href="https://www.pinkarrows.app" />
-    <meta property="og:title" content="Pink Arrows - Add text and draw on images, screenshots and screen captures" />
     <meta charset="UTF-8">
+    <title>escribo — Add text and draw on images, screenshots and screen captures</title>
+    <meta name="description"
+        content="Drag and drop an image, and add text, shapes, and highlights to the image. Free and simple to use." />
+    <link rel="canonical" href="https://www.pinkarrows.app" />
+    <meta property="og:title" content="escribo — Add text and draw on images, screenshots and screen captures" />
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico">
-    <style>
-        body {
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        #drop_area {
-            display: flex;
-            flex-grow: 1;
-            border: 1px solid black;
-        }
-
-        .tool-btn.selected {
-            background-color: #007bff;
-            color: white;
-        }
-
-        svg {
-            margin: 2px;
-        }
-
-        .toolbar {
-            display: flex;
-            align-items: start;
-            gap: 1px;
-            /* Adjust the gap as needed */
-        }
-
-        .watermark-toggle-container {
-            display: flex;
-            align-items: center;
-            height: 100%;
-            gap: 3px;
-        }
-
-        h1 {
-            font-size: 1.0em !important
-        }
-    </style>
-    <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" as="style"
-        onload="this.onload=null;this.rel='stylesheet'">
-    <noscript>
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css">
-    </noscript>
-    <link rel="stylesheet" href="src/plugins/jquery.toast.min.css">
+    <link rel="icon" type="image/png" href="assets/icon.png">
+    <link rel="stylesheet" href="src/styles.css">
 </head>
 
 <body>
-    <div id="toolbar" class="toolbar">
-        <button data-mode="NONE" class="tool-btn" title="(s) Select">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#FF007F" class="bi bi-cursor-fill"
-                viewBox="0 0 16 16">
-                <path
-                    d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
-            </svg>
-            Select</button>
-        <button data-mode="ARROW" class="tool-btn" title="(a) Arrow">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                fill="#FF007F" class="bi bi-arrow-up-right" viewBox="0 0 16 16">
-                <path fill-rule="evenodd"
-                    d="M14 2.5a.5.5 0 0 0-.5-.5h-6a.5.5 0 0 0 0 1h4.793L2.146 13.146a.5.5 0 0 0 .708.708L13 3.707V8.5a.5.5 0 0 0 1 0v-6z" />
-            </svg>
-            Arrow</button>
+    <div id="app">
 
-        <button data-mode="RECT" class="tool-btn" title="(r) Rectangle">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#FF007F" class="bi bi-app"
-                viewBox="0 0 16 16">
-                <path
-                    d="M11 2a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3h6zM5 1a4 4 0 0 0-4 4v6a4 4 0 0 0 4 4h6a4 4 0 0 0 4-4V5a4 4 0 0 0-4-4H5z" />
-            </svg>
-            Rectangle</button>
-        <button data-mode="TEXT" class="tool-btn" title="(t) Text">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#FF007F" class="bi bi-fonts"
-                viewBox="0 0 16 16">
-                <path
-                    d="M12.258 3h-8.51l-.083 2.46h.479c.26-1.544.758-1.783 2.693-1.845l.424-.013v7.827c0 .663-.144.82-1.3.923v.52h4.082v-.52c-1.162-.103-1.306-.26-1.306-.923V3.602l.431.013c1.934.062 2.434.301 2.693 1.846h.479L12.258 3z" />
-            </svg>
-            Text</button>
-        <button data-mode="EMOJI" class="tool-btn" id="emoji-button" title="(e) Emoji">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#FF007F" class="bi bi-emoji-smile"
-                viewBox="0 0 16 16">
-                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
-                <path
-                    d="M4.285 9.567a.5.5 0 0 1 .683.183A3.498 3.498 0 0 0 8 11.5a3.498 3.498 0 0 0 3.032-1.75.5.5 0 1 1 .866.5A4.498 4.498 0 0 1 8 12.5a4.498 4.498 0 0 1-3.898-2.25.5.5 0 0 1 .183-.683zM7 6.5C7 7.328 6.552 8 6 8s-1-.672-1-1.5S5.448 5 6 5s1 .672 1 1.5zm4 0c0 .828-.448 1.5-1 1.5s-1-.672-1-1.5S9.448 5 10 5s1 .672 1 1.5z" />
-            </svg>
-            Emoji</button>
-        <button class="tool-btn" id="undo-button" title="(Ctrl-Z) Undo">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#FF007F"
-                class="bi bi-arrow-counterclockwise" viewBox="0 0 16 16">
-                <path fill-rule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2v1z" />
-                <path
-                    d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z" />
-            </svg>
-        </button>
-        <button class="tool-btn" id="redo-button" title="(Ctrl-Shift-Z) Redo">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#FF007F" class="bi bi-arrow-clockwise"
-                viewBox="0 0 16 16">
-                <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
-                <path
-                    d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
-            </svg>
-        </button>
-
-        <button class="tool-btn" id="download-button" title="(d) Download">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="#FF007F" class="bi bi-download"
-                viewBox="0 0 16 16">
-                <path
-                    d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />
-                <path
-                    d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z" />
-            </svg>
-        </button>
-        <button class="tool-btn" id="copy-image-to-clipboard-button" title="(c) Copy Image to Clipboard">
-            <svg width="18" height="22" viewBox="0 0 18 22" stroke="#FF007F" fill=none stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">
-                <path d="M6 11H9.75M6 14H9.75M6 17H9.75M12.75 17.75H15C16.2426 17.75 17.25 16.7426 17.25 15.5V5.10822C17.25 3.97324 16.405 3.01015 15.2739 2.91627C14.9006 2.88529 14.5261 2.85858 14.1505 2.83619M8.34952 2.83619C8.28483 3.04602 8.25 3.26894 8.25 3.5C8.25 3.91421 8.58579 4.25 9 4.25H13.5C13.9142 4.25 14.25 3.91421 14.25 3.5C14.25 3.26894 14.2152 3.04602 14.1505 2.83619M8.34952 2.83619C8.63276 1.91757 9.48842 1.25 10.5 1.25H12C13.0116 1.25 13.8672 1.91757 14.1505 2.83619M8.34952 2.83619C7.97386 2.85858 7.59937 2.88529 7.22608 2.91627C6.09499 3.01015 5.25 3.97324 5.25 5.10822V7.25M5.25 7.25H1.875C1.25368 7.25 0.75 7.75368 0.75 8.375V19.625C0.75 20.2463 1.25368 20.75 1.875 20.75H11.625C12.2463 20.75 12.75 20.2463 12.75 19.625V8.375C12.75 7.75368 12.2463 7.25 11.625 7.25H5.25ZM3.75 11H3.7575V11.0075H3.75V11ZM3.75 14H3.7575V14.0075H3.75V14ZM3.75 17H3.7575V17.0075H3.75V17Z" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-        </button>
-        <div class="watermark-toggle-container">
-            <label for="watermark-toggle" class="mr-2">Watermark</label>
-            <input type="checkbox" id="watermark-toggle" checked>
+        <!-- ============================ Title bar ============================ -->
+        <div id="titlebar">
+            <span id="traffic-space" aria-hidden="true"></span>
+            <div class="mark" aria-hidden="true"><span>e</span></div>
+            <div id="title-meta">
+                <span id="title-name">No image</span>
+                <span id="title-dims"></span>
+            </div>
+            <button id="prefs-open" title="Preferences — Ctrl+," aria-label="Preferences">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"></path><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"></path></svg>
+            </button>
+            <div id="win-controls">
+                <button class="win-btn" id="win-min" title="Minimize" aria-label="Minimize">
+                    <svg class="ico-linux" width="9" height="9" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M1 5h8"></path></svg>
+                    <svg class="ico-win" width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1" aria-hidden="true"><path d="M0 5h10"></path></svg>
+                </button>
+                <button class="win-btn" id="win-max" title="Maximize" aria-label="Maximize">
+                    <svg class="ico-linux" width="9" height="9" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.4" fill="none" aria-hidden="true"><rect x="1.2" y="1.2" width="7.6" height="7.6" rx="1.4"></rect></svg>
+                    <svg class="ico-win" width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1" fill="none" aria-hidden="true"><rect x=".5" y=".5" width="9" height="9"></rect></svg>
+                </button>
+                <button class="win-btn close" id="win-close" title="Close" aria-label="Close">
+                    <svg class="ico-linux" width="9" height="9" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"></path></svg>
+                    <svg class="ico-win" width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1" aria-hidden="true"><path d="M0 0l10 10M10 0L0 10"></path></svg>
+                </button>
+            </div>
         </div>
-    </div>
-    <div id="drop_area">
-        <div id="image-placeholder" style="z-index: 100;"
-        class="d-flex flex-column justify-content-center align-items-center position-absolute top-50 start-50 translate-middle">
-        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" fill="#FF007F" class="bi bi-cloud-arrow-up"
-            viewBox="0 0 16 16">
-            <path fill-rule="evenodd"
-                d="M7.646 5.146a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1-.708.708L8.5 6.707V10.5a.5.5 0 0 1-1 0V6.707L6.354 7.854a.5.5 0 1 1-.708-.708l2-2z" />
-            <path
-                    d="M4.406 3.342A5.53 5.53 0 0 1 8 2c2.69 0 4.923 2 5.166 4.579C14.758 6.804 16 8.137 16 9.773 16 11.569 14.502 13 12.687 13H3.781C1.708 13 0 11.366 0 9.318c0-1.763 1.266-3.223 2.942-3.593.143-.863.698-1.723 1.464-2.383zm.653.757c-.757.653-1.153 1.44-1.153 2.056v.448l-.445.049C2.064 6.805 1 7.952 1 9.318 1 10.785 2.23 12 3.781 12h8.906C13.98 12 15 10.988 15 9.773c0-1.216-1.02-2.228-2.313-2.228h-.5v-.5C12.188 4.825 10.328 3 8 3a4.53 4.53 0 0 0-2.941 1.1z" />
-                </svg>
-                <div class="text-center">
-                    <p class="mb-1">Drag and drop an image here or paste (Ctrl+V / ⌘V)</p>
+
+        <!-- ============================= Toolbar ============================= -->
+        <div id="toolbar">
+            <div class="tool-group" role="toolbar" aria-label="Tools">
+                <button class="tool-btn" data-tool="select" title="Select — S" aria-pressed="false">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z"></path></svg>
+                    <span class="label">Select</span>
+                </button>
+                <button class="tool-btn" data-tool="arrow" title="Arrow — A" aria-pressed="false">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M14 2.5a.5.5 0 0 0-.5-.5h-6a.5.5 0 0 0 0 1h4.793L2.146 13.146a.5.5 0 0 0 .708.708L13 3.707V8.5a.5.5 0 0 0 1 0v-6z"></path></svg>
+                    <span class="label">Arrow</span>
+                </button>
+                <button class="tool-btn" data-tool="rect" title="Box — B" aria-pressed="false">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.2" y="2.2" width="11.6" height="11.6" rx="2.6"></rect></svg>
+                    <span class="label">Box</span>
+                </button>
+                <button class="tool-btn" data-tool="mark" title="Mark — M" aria-pressed="false">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M9.6 2.6l3.8 3.8-5.6 5.6H4v-3.8z"></path><path d="M2.2 14.4h11.6" stroke-linecap="round"></path></svg>
+                    <span class="label">Mark</span>
+                </button>
+                <button class="tool-btn" data-tool="text" title="Text — T" aria-pressed="false">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M12.258 3h-8.51l-.083 2.46h.479c.26-1.544.758-1.783 2.693-1.845l.424-.013v7.827c0 .663-.144.82-1.3.923v.52h4.082v-.52c-1.162-.103-1.306-.26-1.306-.923V3.602l.431.013c1.934.062 2.434.301 2.693 1.846h.479L12.258 3z"></path></svg>
+                    <span class="label">Text</span>
+                </button>
+                <button class="tool-btn" data-tool="emoji" title="Emoji — E" aria-pressed="false">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"></path><path d="M4.285 9.567a.5.5 0 0 1 .683.183A3.498 3.498 0 0 0 8 11.5a3.498 3.498 0 0 0 3.032-1.75.5.5 0 1 1 .866.5A4.498 4.498 0 0 1 8 12.5a4.498 4.498 0 0 1-3.898-2.25.5.5 0 0 1 .183-.683zM7 6.5C7 7.328 6.552 8 6 8s-1-.672-1-1.5S5.448 5 6 5s1 .672 1 1.5zm4 0c0 .828-.448 1.5-1 1.5s-1-.672-1-1.5S9.448 5 10 5s1 .672 1 1.5z"></path></svg>
+                    <span class="label">Emoji</span>
+                </button>
+                <button class="tool-btn" data-tool="crop" title="Crop — C" aria-pressed="false">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4.2 1v10.8h10.8"></path><path d="M1 4.2h10.8V15"></path></svg>
+                    <span class="label">Crop</span>
+                </button>
+            </div>
+
+            <div class="divider"></div>
+
+            <div id="palette" role="group" aria-label="Annotation colour"></div>
+
+            <div class="divider"></div>
+
+            <button class="icon-btn" id="undo" title="Undo — Ctrl+Z" aria-label="Undo">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2v1z"></path><path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z"></path></svg>
+            </button>
+            <button class="icon-btn" id="redo" title="Redo — Ctrl+Shift+Z" aria-label="Redo">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"></path><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"></path></svg>
+            </button>
+
+            <div class="spacer"></div>
+
+            <div class="split" id="copy-split">
+                <button class="action-btn" id="copy" title="Copy to clipboard — Ctrl+C">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.4" y="1.6" width="9" height="9" rx="2"></rect><path d="M10.6 13.2v.6a1.6 1.6 0 0 1-1.6 1.6H3.2a1.6 1.6 0 0 1-1.6-1.6V6.4a1.6 1.6 0 0 1 1.6-1.6h.6"></path></svg>
+                    <span class="label">Copy</span>
+                </button>
+                <button id="copy-caret" title="More copy options" aria-label="More copy options" aria-haspopup="menu" aria-expanded="false">
+                    <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true"><path d="M1 3.3h8L5 7.6z"></path></svg>
+                </button>
+                <div id="copy-menu" role="menu" hidden>
+                    <button id="copy-menu-copy" role="menuitem">
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.4" y="1.6" width="9" height="9" rx="2"></rect><path d="M10.6 13.2v.6a1.6 1.6 0 0 1-1.6 1.6H3.2a1.6 1.6 0 0 1-1.6-1.6V6.4a1.6 1.6 0 0 1 1.6-1.6h.6"></path></svg>
+                        <span>Copy</span>
+                        <kbd id="copy-key">Ctrl C</kbd>
+                    </button>
+                    <button id="copy-menu-close" role="menuitem">
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M6.2 2.2H3.4A1.6 1.6 0 0 0 1.8 3.8v8.4a1.6 1.6 0 0 0 1.6 1.6h2.8"></path><path d="M10.4 11.2 13.8 8l-3.4-3.2M13.4 8H5.6"></path></svg>
+                        <span>Copy &amp; close</span>
+                        <kbd id="copy-close-key">⇧Ctrl C</kbd>
+                    </button>
                 </div>
-                <input type="file" id="fileInput" style="display: none;" accept="image/*">
-            <button id="file-upload-button" class="tool-btn">or select an image</button>
+            </div>
+            <button class="action-btn primary" id="save" title="Save to disk — Ctrl+S">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"></path><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"></path></svg>
+                <span class="label">Save</span>
+            </button>
         </div>
-        <canvas id="canvas" width="800" height="600"></canvas>
-    </div>
-    <!-- Button trigger modal -->
 
-    <div class="modal fade" id="aboutModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-body text-center">
-                    <p>Thanks for using Pink Arrows. Contribute to the project by giving us a ⭐️ on <a
-                        href='https://github.com/robbalian/pinkarrows'>Github</a> and filing an issue with bugs or
-                    feature requests.</p>
-                    <div class="hotkeys-container" style="text-align: left;">
-                    <h5>Hotkeys</h5>
-                    <ul class="list-unstyled">
-                        <li><strong>(s)</strong> Select</li>
-                        <li><strong>(a)</strong> Arrow</li>
-                        <li><strong>(r)</strong> Rectangle</li>
-                        <li><strong>(t)</strong> Text</li>
-                        <li><strong>(e)</strong> Emoji</li>
-                        <li><strong>(Ctrl-Z)</strong> Undo</li>
-                        <li><strong>(Ctrl-Shift-Z)</strong> Redo</li>
-                        <li><strong>(d)</strong> Download</li>
-                            <li><strong>(c)</strong> Copy Image to Clipboard</li>
-                        </ul>
+        <!-- =========================== Canvas area =========================== -->
+        <div id="area">
+
+            <div id="emoji-picker" hidden></div>
+
+            <div id="stage">
+                <div id="backdrop">
+                    <div id="shot">
+                        <img id="shot-img" alt="">
+                    </div>
+                </div>
+                <canvas id="canvas"></canvas>
+                <div id="watermark">
+                    <div class="mark" aria-hidden="true"><span>e</span></div>
+                    made with escriboapp.com
+                </div>
+                <div id="crop-layer" hidden>
+                    <div id="crop-box">
+                        <div class="crop-handle nw" data-handle="nw"></div>
+                        <div class="crop-handle ne" data-handle="ne"></div>
+                        <div class="crop-handle sw" data-handle="sw"></div>
+                        <div class="crop-handle se" data-handle="se"></div>
                     </div>
                 </div>
             </div>
+
+            <div id="empty">
+                <div class="mark" aria-hidden="true"><span>e</span></div>
+                <div>
+                    <h2>Drop a screenshot here</h2>
+                    <p>or paste from the clipboard with Ctrl+V</p>
+                </div>
+                <button id="file-open">Choose an image…</button>
+                <input type="file" id="file-input" accept="image/*" hidden>
+            </div>
+
+            <div id="crop-bar" hidden>
+                <span id="crop-size"></span>
+                <button id="crop-cancel">Cancel</button>
+                <button id="crop-apply" class="primary">Apply crop</button>
+            </div>
+
+            <div id="toast" hidden></div>
+        </div>
+
+        <!-- =========================== Status bar ============================ -->
+        <div id="statusbar">
+            <div class="popover-anchor">
+                <button class="status-btn" id="presets-btn" title="Presets" aria-expanded="false">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.2 2.4 5.3 8 8.4l5.6-3.1z"></path><path d="M2.4 8.3 8 11.4l5.6-3.1" stroke-linecap="round"></path><path d="M2.4 11.2 8 14.3l5.6-3.1" stroke-linecap="round"></path></svg>
+                    <span id="presets-label">Presets</span>
+                </button>
+                <div id="presets-pop" class="popover left" hidden>
+                    <div class="pop-head">
+                        <span class="pop-label">Presets</span>
+                        <button class="pop-link" id="presets-profile" type="button" title="Manage profiles">Default</button>
+                    </div>
+                    <div id="presets-list" role="listbox" aria-label="Presets"></div>
+                    <div class="pop-note" id="presets-empty">No presets in this profile yet. Save the current style — ratio, size, padding, fill, watermark — to reuse it, or share it with your team.</div>
+                    <div id="preset-form" hidden>
+                        <input type="text" id="preset-name" placeholder="Preset name" maxlength="60" aria-label="Preset name">
+                        <button id="preset-save" class="primary" type="button">Save</button>
+                        <button id="preset-cancel" type="button">Cancel</button>
+                    </div>
+                    <div class="preset-actions">
+                        <button id="preset-new" type="button">Save current as preset…</button>
+                        <button id="presets-import" type="button">Import…</button>
+                        <button id="presets-export" type="button">Export all</button>
+                    </div>
+                    <input type="file" id="preset-file" accept=".json,application/json" hidden>
+                </div>
+            </div>
+            <span id="hint"></span>
+            <div class="spacer"></div>
+
+            <div class="popover-anchor">
+                <button class="status-btn" id="ratio-btn" title="Aspect ratio" aria-expanded="false">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="1.7" y="3.4" width="12.6" height="9.2" rx="1.6"></rect><path d="M5.4 3.4v9.2"></path></svg>
+                    <span id="ratio-label">Orig</span>
+                </button>
+                <div id="ratio-pop" class="popover" hidden>
+                    <div class="pop-label">Aspect ratio</div>
+                    <div class="segmented ratios" id="ratio-seg" role="group" aria-label="Aspect ratio"></div>
+                    <div class="pop-note" id="ratio-note"></div>
+                    <div class="pop-label export">Export size</div>
+                    <div class="size-row">
+                        <input type="number" id="out-w" min="240" max="8000" step="10" aria-label="Export width">
+                        <span class="x">×</span>
+                        <span id="out-h"></span>
+                        <span class="unit">px</span>
+                    </div>
+                    <div class="segmented" id="scale-seg" role="group" aria-label="Export scale"></div>
+                </div>
+            </div>
+
+            <div class="status-divider"></div>
+
+            <div class="popover-anchor">
+                <button class="status-btn" id="backdrop-btn" title="Padding &amp; fill" aria-expanded="false">
+                    <span id="backdrop-chip"></span>
+                    Padding
+                </button>
+                <div id="backdrop-pop" class="popover" hidden>
+                    <div class="pad-row">
+                        <span>Padding</span>
+                        <input type="range" id="pad-range" min="0" max="18" step="1" value="0" aria-label="Padding">
+                        <span id="pad-value" class="pad-value">0%</span>
+                    </div>
+                    <div class="pop-note pad-note" id="pad-note"></div>
+                    <div class="pop-label">Fill — solid</div>
+                    <div class="chip-row solid" id="solid-chips"></div>
+                    <div class="pop-label">Fill — gradient</div>
+                    <div class="chip-row grad" id="grad-chips"></div>
+                </div>
+            </div>
+
+            <div class="status-divider"></div>
+
+            <label id="wm-label">
+                Watermark
+                <input type="checkbox" id="wm-toggle" checked>
+                <span class="switch"><i></i></span>
+            </label>
+
+            <div class="status-divider"></div>
+
+            <div id="zoom-controls">
+                <button id="zoom-out" title="Zoom out" aria-label="Zoom out">
+                    <svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2 6h8"></path></svg>
+                </button>
+                <button id="zoom-fit" title="Fit to window">Fit</button>
+                <button id="zoom-in" title="Zoom in" aria-label="Zoom in">
+                    <svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M6 2v8M2 6h8"></path></svg>
+                </button>
+            </div>
+
+            <div class="status-divider"></div>
+
+            <button class="status-btn" id="colours-btn" title="Preferences">Colours…</button>
+
+            <div class="status-divider"></div>
+
+            <button class="status-btn" id="theme-btn" title="Toggle appearance">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"></path></svg>
+                <span id="theme-label">Dark</span>
+            </button>
         </div>
     </div>
+
+    <!-- ============================ Preferences ============================= -->
+    <div id="prefs" hidden>
+        <div id="prefs-panel" role="dialog" aria-modal="true" aria-label="Preferences">
+            <div id="prefs-head">
+                <span>Preferences<span id="prefs-profile" class="prefs-profile"></span></span>
+                <button class="close-btn" id="prefs-close" title="Close" aria-label="Close preferences">
+                    <svg width="11" height="11" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"></path></svg>
+                </button>
+            </div>
+
+            <div id="prefs-body">
+                <div id="prefs-tabs" role="tablist">
+                    <button class="prefs-tab" data-tab="annotate" role="tab" aria-selected="true">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M14 2.5a.5.5 0 0 0-.5-.5h-6a.5.5 0 0 0 0 1h4.793L2.146 13.146a.5.5 0 0 0 .708.708L13 3.707V8.5a.5.5 0 0 0 1 0v-6z"></path></svg>
+                        Annotations
+                    </button>
+                    <button class="prefs-tab" data-tab="backdrop" role="tab" aria-selected="false">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.9" y="1.9" width="12.2" height="12.2" rx="2.4"></rect><rect x="4.7" y="4.7" width="6.6" height="6.6" rx="1.2"></rect></svg>
+                        Padding fill
+                    </button>
+                    <button class="prefs-tab" data-tab="profiles" role="tab" aria-selected="false">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.2 2.4 5.3 8 8.4l5.6-3.1z"></path><path d="M2.4 8.3 8 11.4l5.6-3.1" stroke-linecap="round"></path><path d="M2.4 11.2 8 14.3l5.6-3.1" stroke-linecap="round"></path></svg>
+                        Profiles
+                    </button>
+                </div>
+
+                <div id="prefs-content">
+                    <section id="tab-annotate">
+                        <div class="prefs-title">Annotation palette</div>
+                        <div class="prefs-note">Six colours appear in the toolbar. The starred one is armed when a screenshot opens.</div>
+                        <div class="pref-grid" id="palette-rows"></div>
+                        <div class="prefs-title font-title">Label font</div>
+                        <div class="prefs-note">Used for new text labels; a selected label changes too.</div>
+                        <div class="segmented" id="font-seg" role="group" aria-label="Label font"></div>
+                        <input type="text" id="font-custom" class="font-custom" placeholder="Or any installed font family, e.g. Inter" aria-label="Custom font family">
+                    </section>
+
+                    <section id="tab-backdrop" hidden>
+                        <div class="prefs-title">Padding fill presets</div>
+                        <div class="prefs-note">Used for the margin and any extra canvas. Pick one from Padding in the status bar.</div>
+                        <div class="pad-row">
+                            <span>Padding</span>
+                            <input type="range" id="pad-range-prefs" min="0" max="18" step="1" value="0" aria-label="Padding">
+                            <span id="pad-value-prefs" class="pad-value">0%</span>
+                        </div>
+                        <div class="pop-note pad-note" id="pad-note-prefs"></div>
+                        <div class="pop-label">Fill — solid</div>
+                        <div class="pref-grid solid" id="solid-rows"></div>
+                        <div class="pop-label">Fill — gradient</div>
+                        <div class="pref-grid" id="grad-rows"></div>
+                    </section>
+
+                    <section id="tab-profiles" hidden>
+                        <div class="prefs-title">Profiles</div>
+                        <div class="prefs-note">A profile is the global kit — the annotation palette, padding fills and label font — and holds its own presets. The other tabs edit the active one. Export a profile to hand a teammate the whole setup.</div>
+                        <div id="profile-list" role="listbox" aria-label="Profiles"></div>
+                        <div id="profile-form" hidden>
+                            <input type="text" id="profile-name" placeholder="Profile name" maxlength="60" aria-label="Profile name">
+                            <button id="profile-form-save" class="primary" type="button">Create</button>
+                            <button id="profile-form-cancel" type="button">Cancel</button>
+                        </div>
+                        <div class="preset-actions profile-actions">
+                            <button id="profile-new" type="button">New profile…</button>
+                            <button id="profile-import" type="button">Import…</button>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div id="prefs-foot">
+                <button id="prefs-reset">Restore defaults</button>
+                <button id="prefs-done">Done</button>
+            </div>
+        </div>
     </div>
+
+    <script src="src/plugins/fabric.min.js"></script>
+    <script src="src/plugins/fabric-history.js"></script>
+    <script type="module" src="src/script.js"></script>
+
+    <script>
+        !function (t, e) { var o, n, p, r; e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]), t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.async = !0, p.src = s.api_host.replace(".i.posthog.com", "-assets.i.posthog.com") + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId setPersonProperties".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
+        posthog.init('phc_AgTA0UUBxAb1j7ScfjH8NoNcwzA9vnlvYVAumCFxyss', {
+            api_host: 'https://us.i.posthog.com', person_profiles: 'identified_only'
+        })
+    </script>
 </body>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-<script type="module" src="src/script.js"></script>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"
-    integrity="sha384-HwwvtgBNo3bZJJLYd8oVXjrBZt8cqVSpeBNS5n7C8IVInixGAoxmnlMuBnhbgrkm"
-    crossorigin="anonymous"></script>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
-<script src="src/plugins/fabric-history.js"></script>
-<script src="src/plugins/jquery.toast.min.js"></script>
-<script>
-    !function (t, e) { var o, n, p, r; e.__SV || (window.posthog = e, e._i = [], e.init = function (i, s, a) { function g(t, e) { var o = e.split("."); 2 == o.length && (t = t[o[0]], e = o[1]), t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))) } } (p = t.createElement("script")).type = "text/javascript", p.async = !0, p.src = s.api_host.replace(".i.posthog.com", "-assets.i.posthog.com") + "/static/array.js", (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(p, r); var u = e; for (void 0 !== a ? u = e[a] = [] : a = "posthog", u.people = u.people || [], u.toString = function (t) { var e = "posthog"; return "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e }, u.people.toString = function () { return u.toString(1) + ".people (stub)" }, o = "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys getNextSurveyStep onSessionId setPersonProperties".split(" "), n = 0; n < o.length; n++)g(u, o[n]); e._i.push([i, s, a]) }, e.__SV = 1) }(document, window.posthog || []);
-    posthog.init('phc_AgTA0UUBxAb1j7ScfjH8NoNcwzA9vnlvYVAumCFxyss', {
-        api_host: 'https://us.i.posthog.com', person_profiles: 'identified_only' // or 'always' to create profiles for anonymous users as well
-    })
-</script>
 
 </html>
