@@ -60,12 +60,12 @@ If you'd like to contribute with code:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/rathboma/pinkarrows.git
+git clone https://github.com/rathboma/escribo-app.git
 ```
 
 2. Run a simple http server:
 ```bash
-cd pinkarrows
+cd escribo-app
 python3 -m http.server
 ```
 
