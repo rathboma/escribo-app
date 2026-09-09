@@ -42,6 +42,16 @@ yarn start
 
 The app lives in the system tray. It opens an annotation window automatically when a new screenshot lands in your `Pictures/Screenshots` folder, and the tray menu can also open a file or paste from the clipboard.
 
+### Packaging
+
+```bash
+yarn dist      # installers for the host OS, written to dist/
+yarn pack:dir  # unpacked app only, for a quick look
+```
+
+Windows and macOS builds have to run on their own OS. The icons the installers
+apply live in [`build/`](build/README.md).
+
 ## Contributing
 
 Easiest way to contribute is to toss ideas and features in Github Issues.

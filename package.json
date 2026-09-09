@@ -5,11 +5,40 @@
   "description": "Annotate screenshots with arrows, boxes, highlights and text.",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "pack:dir": "electron-builder --dir",
+    "dist": "electron-builder"
   },
   "repository": "git@github.com:rathboma/pinkarrows.git",
   "author": "Matthew Rathbone <matthew.rathbone@gmail.com>",
   "license": "MIT",
+  "build": {
+    "appId": "com.escriboapp.escribo",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "src/**/*",
+      "assets/**/*",
+      "tray-icon.png",
+      "!assets/readme_gif.gif"
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.graphics-design"
+    },
+    "win": {
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "icon": "build/icons",
+      "category": "Graphics"
+    }
+  },
   "devDependencies": {
     "electron": "^34.2.0",
     "electron-builder": "^25.1.8"
