@@ -11,6 +11,7 @@ I really loved Skitch. In fact, the pink Skitch arrows and dumbed-down text beca
 ## Features
 
 - **Annotate** with arrows, boxes, a highlighter, text labels and emoji
+- **Redact** what shouldn't be readable — drag over it and those pixels are scrambled in place, not covered by an overlay
 - **Crop** to the part of the screenshot that matters
 - **Padding & fill** — add a margin around the shot, on a solid colour or gradient, or leave it transparent
 - **Aspect ratio & export size** — frame the output as 16:9, 4:3, 1:1 or 9:16 and export at ½×, 1×, 2× or any width; the choice is remembered between launches
@@ -29,8 +30,9 @@ On macOS, read `Ctrl` as `⌘`.
 | `A` | Arrow | `Ctrl+Shift+C` | Copy and close the window |
 | `B` | Box | `Ctrl+S` | Save to disk |
 | `M` | Mark (highlighter) | `Ctrl+V` | Paste an image |
-| `T` | Text | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
-| `E` | Emoji | `Ctrl+D` | Duplicate selection |
+| `R` | Redact (scramble) | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo |
+| `T` | Text | `Ctrl+D` | Duplicate selection |
+| `E` | Emoji | `Ctrl+A` | Select every annotation |
 | `C` | Crop | `Ctrl+,` | Preferences |
 
 ## Running the desktop app

@@ -1,4 +1,5 @@
 import { createArrow, attachArrowControls, setArrowHeadPoint, syncArrowGeometry } from './arrow.js';
+import { createRedact, setRedactSource, prepareRedact } from './redact.js';
 
 /* ==========================================================================
    Constants
@@ -57,12 +58,13 @@ const HINTS = {
   arrow: 'Drag to draw an arrow',
   rect: 'Drag to draw a box',
   mark: 'Drag to highlight a region',
+  redact: 'Drag over anything that should not be readable',
   text: 'Click anywhere to add a label',
   emoji: 'Pick an emoji, then click to place it',
   crop: 'Drag the handles, then apply'
 };
 
-const KEYMAP = { s: 'select', a: 'arrow', b: 'rect', m: 'mark', t: 'text', e: 'emoji', c: 'crop' };
+const KEYMAP = { s: 'select', a: 'arrow', b: 'rect', m: 'mark', r: 'redact', t: 'text', e: 'emoji', c: 'crop' };
 
 const RATIOS = [
   { id: 'orig', label: 'Orig', v: null, hint: 'Match the screenshot' },
@@ -392,6 +394,7 @@ function setSource(image, name) {
   img = image;
   imgW = image.naturalWidth;
   imgH = image.naturalHeight;
+  setRedactSource(image, unit());
 
   canvas.clear();
   el.shotImg.src = image.src;
@@ -461,6 +464,9 @@ function setTool(tool) {
 
   el.emojiPicker.hidden = tool !== 'emoji';
   if (tool === 'crop') enterCrop();
+  // Reading the screenshot back costs a few milliseconds; spend them on the
+  // click rather than on the first drag.
+  if (tool === 'redact') prepareRedact();
 
   updateHint();
   canvas.requestRenderAll();
@@ -567,6 +573,10 @@ canvas.on('mouse:down', (opt) => {
       globalCompositeOperation: 'multiply'
     });
     canvas.add(drawing);
+  } else if (ui.tool === 'redact') {
+    beginHistoryEdit();
+    drawing = createRedact(p.x, p.y);
+    canvas.add(drawing);
   } else if (ui.tool === 'arrow') {
     beginHistoryEdit();
     drawing = createArrow(p.x, p.y, { color: color(), unit: u });
@@ -579,7 +589,7 @@ canvas.on('mouse:move', (opt) => {
   if (!drawing) return;
   const p = canvas.getPointer(opt.e);
 
-  if (ui.tool === 'rect' || ui.tool === 'mark') {
+  if (ui.tool === 'rect' || ui.tool === 'mark' || ui.tool === 'redact') {
     drawing.set({
       left: Math.min(p.x, origin.x),
       top: Math.min(p.y, origin.y),
@@ -765,6 +775,7 @@ function applyColorToSelection(hex) {
     if (o.escTool === 'rect') o.set('stroke', hex);
     else if (o.escTool === 'mark') o.set('fill', hex + '55');
     else if (o.escTool === 'emoji') { /* emoji keep their own colours */ }
+    else if (o.escTool === 'redact') { /* a scramble takes the shot's own colours */ }
     else o.set('fill', hex);
   });
   canvas.requestRenderAll();
@@ -941,6 +952,7 @@ function applyCrop() {
     img = cropped;
     imgW = w;
     imgH = h;
+    setRedactSource(cropped, unit());
     el.shotImg.src = cropped.src;
     el.titleDims.textContent = `${w} × ${h}`;
     ui.zoom = 0;
