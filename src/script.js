@@ -34,9 +34,34 @@ const PROFILE_DEFAULTS = {
   wmMode: 'default',
   wmText: '',
   wmColor: '#7c7c88',
-  wmBg: '#ffffff'
+  wmBg: '#ffffff',
+  advanced: null // filled in from ADVANCED_DEFAULTS below
 };
-const PROFILE_FIELDS = ['palette', 'defaultIdx', 'solidBg', 'gradBg', 'font', 'wmMode', 'wmText', 'wmColor', 'wmBg', 'presets'];
+const PROFILE_FIELDS = ['palette', 'defaultIdx', 'solidBg', 'gradBg', 'font', 'wmMode', 'wmText', 'wmColor', 'wmBg', 'advanced', 'presets'];
+
+// Advanced: knobs that were fixed magic numbers baked into the render — the
+// screenshot's rounded corners and drop shadow, the size of annotations, and
+// the highlighter and box-tool corner rounding. Part of the profile, so a
+// team can share a house style including these.
+const ADVANCED_DEFAULTS = {
+  cornerRadius: 1.2,     // % of the shot's width — corner rounding when there's padding
+  shadowBlur: 34,        // drop-shadow blur behind the shot, at a 900px-wide baseline
+  shadowOffsetY: 10,     // drop-shadow vertical offset, same baseline
+  shadowOpacity: 32,     // drop-shadow opacity, 0-100
+  annotationScale: 100,  // size of arrows, boxes, labels & emoji, % of the default
+  boxRadius: 2,          // corner rounding of the box & highlighter tools, same baseline
+  highlightOpacity: 33   // highlighter fill opacity, 0-100
+};
+const ADVANCED_RANGES = {
+  cornerRadius: [0, 5],
+  shadowBlur: [0, 80],
+  shadowOffsetY: [0, 40],
+  shadowOpacity: [0, 100],
+  annotationScale: [50, 200],
+  boxRadius: [0, 20],
+  highlightOpacity: [10, 90]
+};
+PROFILE_DEFAULTS.advanced = { ...ADVANCED_DEFAULTS };
 
 // A preset is a screenshot style: exactly these fields of the current state.
 const STYLE_FIELDS = ['ratio', 'outScale', 'outW', 'pad', 'backdrop', 'watermark'];
@@ -268,8 +293,8 @@ fabric.Rect.prototype._controlsVisibility = { mt: false, mb: false, ml: false, m
 fabric.Polygon.prototype._controlsVisibility = {
   tl: false, tr: false, bl: false, br: false, mt: false, mb: false, ml: true, mr: false
 };
-fabric.Rect.prototype.rx = 2;
-fabric.Rect.prototype.ry = 2;
+// Box & highlighter corner rounding is set per-object (settings.advanced.boxRadius),
+// not on the prototype — see the rect/mark branches in the mouse:down handler.
 
 /** One "unit" is a pixel as it would look on a 900px-wide render, so annotation
  *  weights stay proportional whatever the screenshot's resolution is. */
@@ -365,8 +390,11 @@ function relayout() {
   el.shot.style.top = shotY + 'px';
   el.shot.style.width = shotW + 'px';
   el.shot.style.height = shotH + 'px';
-  el.shot.style.borderRadius = settings.pad > 0 ? shotW * 0.012 + 'px' : '0px';
-  el.shot.style.boxShadow = backdropOn() && settings.pad > 0 ? '0 10px 34px rgba(0,0,0,.32)' : 'none';
+  const A = settings.advanced;
+  el.shot.style.borderRadius = settings.pad > 0 ? shotW * (A.cornerRadius / 100) + 'px' : '0px';
+  el.shot.style.boxShadow = backdropOn() && settings.pad > 0
+    ? `0 ${A.shadowOffsetY}px ${A.shadowBlur}px rgba(0,0,0,${A.shadowOpacity / 100})`
+    : 'none';
 
   // Watermark: bottom-right of the whole output, sized and inset off its width.
   el.watermark.style.setProperty('--wm-size', stageW * 0.0125 + 'px');
@@ -503,7 +531,7 @@ canvas.on('mouse:down', (opt) => {
   if (!hasImage() || ui.tool === 'crop') return;
   const p = canvas.getPointer(opt.e);
   origin = { x: p.x, y: p.y };
-  const u = unit();
+  const u = unit() * (settings.advanced.annotationScale / 100);
 
   if (ui.tool === 'text') {
     // A click on a label, or while one is being edited, belongs to that label.
@@ -557,6 +585,8 @@ canvas.on('mouse:down', (opt) => {
       fill: 'rgba(255,255,255,0)',
       stroke: color(),
       strokeWidth: 5 * u,
+      rx: settings.advanced.boxRadius * u,
+      ry: settings.advanced.boxRadius * u,
       hasBorders: false,
       strokeUniform: true
     });
@@ -571,10 +601,10 @@ canvas.on('mouse:down', (opt) => {
       width: 0,
       height: 0,
       escTool: 'mark',
-      fill: color() + '55',
+      fill: color() + alphaHex(settings.advanced.highlightOpacity),
       strokeWidth: 0,
-      rx: 2 * u,
-      ry: 2 * u,
+      rx: settings.advanced.boxRadius * u,
+      ry: settings.advanced.boxRadius * u,
       hasBorders: false,
       globalCompositeOperation: 'multiply'
     });
@@ -820,7 +850,7 @@ function applyColorToSelection(hex) {
   if (!objects.length) return;
   objects.forEach((o) => {
     if (o.escTool === 'rect') o.set('stroke', hex);
-    else if (o.escTool === 'mark') o.set('fill', hex + '55');
+    else if (o.escTool === 'mark') o.set('fill', hex + alphaHex(settings.advanced.highlightOpacity));
     else if (o.escTool === 'emoji') { /* emoji keep their own colours */ }
     else if (o.escTool === 'redact') { /* a scramble takes the shot's own colours */ }
     else o.set('fill', hex);
@@ -1167,7 +1197,7 @@ async function compose() {
   const outW = exportWidth(L);
   const outH = Math.max(1, Math.round(L.outH * k));
   const shot = { x: L.shotX * k, y: L.shotY * k, w: imgW * k, h: imgH * k };
-  const radius = settings.pad > 0 ? shot.w * 0.012 : 0;
+  const radius = settings.pad > 0 ? shot.w * (settings.advanced.cornerRadius / 100) : 0;
 
   const out = document.createElement('canvas');
   out.width = outW;
@@ -1191,9 +1221,9 @@ async function compose() {
     if (settings.pad > 0) {
       const u = unit() * k;
       ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,.32)';
-      ctx.shadowBlur = 34 * u;
-      ctx.shadowOffsetY = 10 * u;
+      ctx.shadowColor = `rgba(0,0,0,${settings.advanced.shadowOpacity / 100})`;
+      ctx.shadowBlur = settings.advanced.shadowBlur * u;
+      ctx.shadowOffsetY = settings.advanced.shadowOffsetY * u;
       ctx.fillStyle = '#000';
       roundRectPath(ctx, shot.x, shot.y, shot.w, shot.h, radius);
       ctx.fill();
@@ -1551,6 +1581,20 @@ function deletePreset(preset) {
 
 /* --- Profiles: the global kit --------------------------------------------- */
 
+/** The advanced options, each checked and clamped to its range, with defaults
+ *  filled in for anything missing or out of bounds — an imported profile is
+ *  untrusted the same way a preset is. */
+function sanitizeAdvancedValues(v) {
+  const src = v && typeof v === 'object' ? v : {};
+  const out = {};
+  Object.keys(ADVANCED_DEFAULTS).forEach((key) => {
+    const [min, max] = ADVANCED_RANGES[key];
+    const n = Number(src[key]);
+    out[key] = Number.isFinite(n) ? clamp(n, min, max) : ADVANCED_DEFAULTS[key];
+  });
+  return out;
+}
+
 /** A profile's options, each checked, with defaults filled in. */
 function sanitizeProfileValues(v) {
   const d = PROFILE_DEFAULTS;
@@ -1568,6 +1612,7 @@ function sanitizeProfileValues(v) {
     wmText: typeof src.wmText === 'string' ? src.wmText.slice(0, 120) : d.wmText,
     wmColor: isHex(src.wmColor) ? src.wmColor : d.wmColor,
     wmBg: isHex(src.wmBg) ? src.wmBg : d.wmBg,
+    advanced: sanitizeAdvancedValues(src.advanced),
     presets: Array.isArray(src.presets) ? src.presets.map(sanitizePreset).filter(Boolean) : []
   };
 }
@@ -1879,6 +1924,47 @@ function submitProfileForm() {
    Preferences
    ========================================================================== */
 
+// Advanced tab: the UI metadata for each ADVANCED_DEFAULTS field. Order here
+// is the order the sliders render in.
+const ADVANCED_LABELS = {
+  cornerRadius: { label: 'Corner radius', step: 0.1, unit: '%', hint: "Rounds the screenshot's corners when there's padding." },
+  shadowBlur: { label: 'Shadow blur', step: 1, unit: 'px', hint: 'Softness of the drop shadow behind the screenshot.' },
+  shadowOffsetY: { label: 'Shadow offset', step: 1, unit: 'px', hint: 'How far the drop shadow falls below the screenshot.' },
+  shadowOpacity: { label: 'Shadow opacity', step: 1, unit: '%', hint: 'Darkness of the drop shadow.' },
+  annotationScale: { label: 'Annotation size', step: 5, unit: '%', hint: 'Size of new arrows, boxes, labels and emoji.' },
+  boxRadius: { label: 'Box corner radius', step: 1, unit: 'px', hint: 'Corner rounding for the box and highlighter tools.' },
+  highlightOpacity: { label: 'Highlighter opacity', step: 1, unit: '%', hint: 'Fill opacity of the highlighter tool.' }
+};
+
+function formatAdvValue(n, unit) {
+  return `${Math.round(n * 10) / 10}${unit}`;
+}
+
+function renderAdvancedTab() {
+  const rows = $('#advanced-rows');
+  rows.innerHTML = '';
+  Object.keys(ADVANCED_DEFAULTS).forEach((key) => {
+    const meta = ADVANCED_LABELS[key];
+    const [min, max] = ADVANCED_RANGES[key];
+    const row = document.createElement('div');
+    row.className = 'pad-row adv-row';
+    row.title = meta.hint;
+    row.innerHTML = `
+      <span>${meta.label}</span>
+      <input type="range" min="${min}" max="${max}" step="${meta.step}" value="${settings.advanced[key]}" aria-label="${meta.label}">
+      <span class="pad-value">${formatAdvValue(settings.advanced[key], meta.unit)}</span>`;
+    const input = row.querySelector('input');
+    const value = row.querySelector('.pad-value');
+    input.addEventListener('input', (e) => {
+      settings.advanced[key] = clamp(Number(e.target.value), min, max);
+      value.textContent = formatAdvValue(settings.advanced[key], meta.unit);
+      saveSettings();
+      relayout();
+    });
+    rows.appendChild(row);
+  });
+}
+
 function renderPrefs() {
   const paletteRows = $('#palette-rows');
   paletteRows.innerHTML = '';
@@ -1956,6 +2042,7 @@ function renderPrefs() {
     gradRows.appendChild(row);
   });
 
+  renderAdvancedTab();
   syncWatermarkUI();
   renderProfileRows();
 }
@@ -1967,6 +2054,7 @@ function setPrefsTab(tab) {
   });
   $('#tab-annotate').hidden = tab !== 'annotate';
   $('#tab-backdrop').hidden = tab !== 'backdrop';
+  $('#tab-advanced').hidden = tab !== 'advanced';
   $('#tab-watermark').hidden = tab !== 'watermark';
   $('#tab-profiles').hidden = tab !== 'profiles';
   if (tab !== 'profiles') closeProfileForm();
@@ -1990,6 +2078,11 @@ function closePrefs() {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+/** A 0-100 opacity as the two hex digits fabric expects appended to a colour. */
+function alphaHex(pct) {
+  return clamp(Math.round((pct / 100) * 255), 0, 255).toString(16).padStart(2, '0');
 }
 
 let toastTimer = null;
@@ -2043,10 +2136,10 @@ document.querySelectorAll('.prefs-tab').forEach((btn) => {
 $('#prefs-reset').addEventListener('click', () => {
   // The active profile's kit goes back to stock; its presets stay.
   const fresh = sanitizeProfileValues(PROFILE_DEFAULTS);
-  ['palette', 'defaultIdx', 'solidBg', 'gradBg', 'font', 'wmMode', 'wmText', 'wmColor', 'wmBg'].forEach((key) => { settings[key] = fresh[key]; });
+  ['palette', 'defaultIdx', 'solidBg', 'gradBg', 'font', 'wmMode', 'wmText', 'wmColor', 'wmBg', 'advanced'].forEach((key) => { settings[key] = fresh[key]; });
   saveSettings();
   refreshProfileUI();
-  toast(`Restored the default colours, font and watermark for “${activeProfile().name}”`);
+  toast(`Restored the default colours, font, watermark and advanced style for “${activeProfile().name}”`);
 });
 
 /* --- Popovers ------------------------------------------------------------

@@ -970,6 +970,10 @@ body.no-watermark #watermark { display: none; }
   font-variant-numeric: tabular-nums;
 }
 
+.adv-row { margin-bottom: 12px; cursor: help; }
+.adv-row span:first-child { flex: 0 0 128px; }
+.adv-row .pad-value { flex-basis: 42px; }
+
 /* --- Preferences --------------------------------------------------------- */
 #prefs {
   position: absolute;
