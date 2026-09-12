@@ -28,9 +28,15 @@ const PROFILE_DEFAULTS = {
     { a: '#C6E2FF', b: '#7FAEFF' },
     { a: '#D9F5E8', b: '#8AD6B8' }
   ],
-  font: 'system'
+  font: 'system',
+  // Watermark branding. 'default' is the escribo mark and wordmark; 'custom'
+  // is free text with no icon. Colour and background apply to both.
+  wmMode: 'default',
+  wmText: '',
+  wmColor: '#7c7c88',
+  wmBg: '#ffffff'
 };
-const PROFILE_FIELDS = ['palette', 'defaultIdx', 'solidBg', 'gradBg', 'font', 'presets'];
+const PROFILE_FIELDS = ['palette', 'defaultIdx', 'solidBg', 'gradBg', 'font', 'wmMode', 'wmText', 'wmColor', 'wmBg', 'presets'];
 
 // A preset is a screenshot style: exactly these fields of the current state.
 const STYLE_FIELDS = ['ratio', 'outScale', 'outW', 'pad', 'backdrop', 'watermark'];
@@ -768,6 +774,47 @@ function syncFontUI() {
   if (document.activeElement !== custom) custom.value = known ? '' : settings.font;
 }
 
+/* --- Watermark ------------------------------------------------------------ */
+
+function setWatermarkMode(mode) {
+  settings.wmMode = mode === 'custom' ? 'custom' : 'default';
+  saveSettings();
+  syncWatermarkUI();
+  refreshWatermarkPreview();
+}
+
+function renderWatermarkPicker() {
+  document.querySelectorAll('#wm-mode-seg button').forEach((btn) => {
+    btn.addEventListener('click', () => setWatermarkMode(btn.dataset.wmMode));
+  });
+  $('#wm-text').addEventListener('input', (e) => {
+    settings.wmText = e.target.value.slice(0, 120);
+    saveSettings();
+    refreshWatermarkPreview();
+  });
+  $('#wm-color').addEventListener('input', (e) => {
+    settings.wmColor = e.target.value;
+    saveSettings();
+    refreshWatermarkPreview();
+  });
+  $('#wm-bg').addEventListener('input', (e) => {
+    settings.wmBg = e.target.value;
+    saveSettings();
+    refreshWatermarkPreview();
+  });
+}
+
+function syncWatermarkUI() {
+  document.querySelectorAll('#wm-mode-seg button').forEach((btn) => {
+    btn.setAttribute('aria-pressed', String(btn.dataset.wmMode === settings.wmMode));
+  });
+  const text = $('#wm-text');
+  text.hidden = settings.wmMode !== 'custom';
+  if (document.activeElement !== text) text.value = settings.wmText;
+  $('#wm-color').value = settings.wmColor;
+  $('#wm-bg').value = settings.wmBg;
+}
+
 function applyColorToSelection(hex) {
   const objects = canvas.getActiveObjects();
   if (!objects.length) return;
@@ -997,6 +1044,27 @@ function exportWidth(layout = naturalLayout()) {
   return Math.max(1, Math.round(layout.outW * exportScale(layout)));
 }
 
+/** The active profile's watermark background at the pill's usual translucency,
+ *  so a custom colour keeps the same soft look the default white has. */
+const WM_BG_ALPHA = 0.86;
+function hexToRgba(hex, alpha) {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+  if (!m) return `rgba(255,255,255,${alpha})`;
+  return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${alpha})`;
+}
+
+/** The text shown in the watermark: the escribo wordmark, or the profile's
+ *  custom text when it has any. */
+function watermarkText() {
+  const custom = settings.wmMode === 'custom' && settings.wmText.trim();
+  return custom ? settings.wmText.trim() : WATERMARK_TEXT;
+}
+
+/** The "e" mark rides along only with the default branding, not custom text. */
+function watermarkHasIcon() {
+  return settings.wmMode !== 'custom';
+}
+
 /** Bottom-right of the output, sized and inset off its width, so it lands in
  *  the same corner whether or not there is padding or extra canvas. */
 function drawWatermark(ctx, outW, outH) {
@@ -1007,11 +1075,14 @@ function drawWatermark(ctx, outW, outH) {
   const gap = size * 0.4;
   const icon = size * 0.95;
   const label = `600 ${size}px ${UI_FONT}`;
+  const text = watermarkText();
+  const hasIcon = watermarkHasIcon();
+  const lead = hasIcon ? icon + gap : 0;
 
   ctx.save();
   ctx.font = label;
-  const textW = ctx.measureText(WATERMARK_TEXT).width;
-  const boxW = padX * 2 + icon + gap + textW;
+  const textW = ctx.measureText(text).width;
+  const boxW = padX * 2 + lead + textW;
   const boxH = padY * 2 + Math.max(icon, size);
   const bx = outW - inset - boxW;
   const by = outH - inset - boxH;
@@ -1019,33 +1090,45 @@ function drawWatermark(ctx, outW, outH) {
   ctx.shadowColor = 'rgba(0,0,0,.12)';
   ctx.shadowBlur = size * 0.3;
   ctx.shadowOffsetY = size * 0.1;
-  ctx.fillStyle = 'rgba(255,255,255,.86)';
+  ctx.fillStyle = hexToRgba(settings.wmBg, WM_BG_ALPHA);
   roundRectPath(ctx, bx, by, boxW, boxH, size * 0.45);
   ctx.fill();
   ctx.shadowColor = 'transparent';
 
-  const cx = bx + padX + icon / 2;
   const cy = by + boxH / 2;
-  ctx.fillStyle = BRAND;
-  ctx.beginPath();
-  ctx.arc(cx, cy, icon / 2, 0, Math.PI * 2);
-  ctx.fill();
+  if (hasIcon) {
+    const cx = bx + padX + icon / 2;
+    ctx.fillStyle = BRAND;
+    ctx.beginPath();
+    ctx.arc(cx, cy, icon / 2, 0, Math.PI * 2);
+    ctx.fill();
 
-  // Same glyph maths as the .mark rule in styles.css: 1.3245 makes the "e"'s
-  // ink half the circle's diameter, and the offsets recentre it.
-  const glyph = icon * 1.3245;
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `400 ${glyph}px Cookie, cursive`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('e', cx - glyph * 0.03375, cy - glyph * 0.06375);
+    // Same glyph maths as the .mark rule in styles.css: 1.3245 makes the "e"'s
+    // ink half the circle's diameter, and the offsets recentre it.
+    const glyph = icon * 1.3245;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `400 ${glyph}px Cookie, cursive`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('e', cx - glyph * 0.03375, cy - glyph * 0.06375);
+  }
 
-  ctx.fillStyle = '#7c7c88';
+  ctx.fillStyle = settings.wmColor;
   ctx.font = label;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(WATERMARK_TEXT, bx + padX + icon + gap, cy);
+  ctx.fillText(text, bx + padX + lead, cy);
   ctx.restore();
+}
+
+/** Mirrors the exported watermark onto the live #stage preview: text, icon,
+ *  colour and background all follow the active profile. Sizing/inset stay in
+ *  relayout(); this only touches what the profile controls. */
+function refreshWatermarkPreview() {
+  el.watermark.querySelector('.wm-text').textContent = watermarkText();
+  el.watermark.querySelector('.mark').hidden = !watermarkHasIcon();
+  el.watermark.style.color = settings.wmColor;
+  el.watermark.style.background = hexToRgba(settings.wmBg, WM_BG_ALPHA);
 }
 
 /** Renders the annotations at `k` times native resolution, independent of the
@@ -1481,6 +1564,10 @@ function sanitizeProfileValues(v) {
     gradBg: Array.isArray(src.gradBg) && src.gradBg.length === 4 && src.gradBg.every((g) => g && isHex(g.a) && isHex(g.b))
       ? src.gradBg.map((g) => ({ a: g.a, b: g.b })) : d.gradBg.map((g) => ({ ...g })),
     font: typeof src.font === 'string' && src.font.trim() && src.font.length <= 120 ? src.font : d.font,
+    wmMode: src.wmMode === 'custom' ? 'custom' : 'default',
+    wmText: typeof src.wmText === 'string' ? src.wmText.slice(0, 120) : d.wmText,
+    wmColor: isHex(src.wmColor) ? src.wmColor : d.wmColor,
+    wmBg: isHex(src.wmBg) ? src.wmBg : d.wmBg,
     presets: Array.isArray(src.presets) ? src.presets.map(sanitizePreset).filter(Boolean) : []
   };
 }
@@ -1512,6 +1599,7 @@ function refreshProfileUI() {
   renderPalette();
   syncFontUI();
   syncPaddingUI();
+  refreshWatermarkPreview();
   if (!el.prefs.hidden) renderPrefs();
   relayout();
   syncPresetsUI(true);
@@ -1868,6 +1956,7 @@ function renderPrefs() {
     gradRows.appendChild(row);
   });
 
+  syncWatermarkUI();
   renderProfileRows();
 }
 
@@ -1878,6 +1967,7 @@ function setPrefsTab(tab) {
   });
   $('#tab-annotate').hidden = tab !== 'annotate';
   $('#tab-backdrop').hidden = tab !== 'backdrop';
+  $('#tab-watermark').hidden = tab !== 'watermark';
   $('#tab-profiles').hidden = tab !== 'profiles';
   if (tab !== 'profiles') closeProfileForm();
 }
@@ -1953,10 +2043,10 @@ document.querySelectorAll('.prefs-tab').forEach((btn) => {
 $('#prefs-reset').addEventListener('click', () => {
   // The active profile's kit goes back to stock; its presets stay.
   const fresh = sanitizeProfileValues(PROFILE_DEFAULTS);
-  ['palette', 'defaultIdx', 'solidBg', 'gradBg', 'font'].forEach((key) => { settings[key] = fresh[key]; });
+  ['palette', 'defaultIdx', 'solidBg', 'gradBg', 'font', 'wmMode', 'wmText', 'wmColor', 'wmBg'].forEach((key) => { settings[key] = fresh[key]; });
   saveSettings();
   refreshProfileUI();
-  toast(`Restored the default colours and font for “${activeProfile().name}”`);
+  toast(`Restored the default colours, font and watermark for “${activeProfile().name}”`);
 });
 
 /* --- Popovers ------------------------------------------------------------
@@ -2221,6 +2311,9 @@ renderRatioPop();
 renderBackdropChips();
 renderFontPicker();
 syncFontUI();
+renderWatermarkPicker();
+syncWatermarkUI();
+refreshWatermarkPreview();
 syncPresetsUI(true);
 setPrefsTab('annotate');
 
