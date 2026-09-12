@@ -466,8 +466,10 @@ html[data-platform="win32"] .ico-linux { display: none; }
 
 body:not(.is-desktop) #copy-menu-close { display: none; }
 
-/* Responsive: shed labels before anything overflows. */
-@media (max-width: 1019px) {
+/* Responsive: shed labels before anything overflows. The breakpoint has to
+   stay ahead of the toolbar's own width with every label showing — about
+   1140px in the widest of the system fonts it can land in. */
+@media (max-width: 1179px) {
   .tool-btn { padding: 0; }
   .tool-btn .label { display: none; }
 }
@@ -556,6 +558,7 @@ body:not(.is-desktop) #copy-menu-close { display: none; }
 }
 
 #watermark .mark { font-size: .95em; }
+#watermark .mark[hidden] { display: none; }
 body.no-watermark #watermark { display: none; }
 
 /* --- Empty state --------------------------------------------------------- */
@@ -1365,6 +1368,8 @@ body.no-watermark #watermark { display: none; }
 /* --- Label font (Preferences) -------------------------------------------- */
 .font-title { margin-top: 16px; }
 #font-seg { margin-bottom: 8px; }
+#wm-mode-seg { margin-bottom: 10px; }
+#wm-text { margin-bottom: 14px; }
 
 .font-custom {
   width: 100%;

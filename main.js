@@ -9,6 +9,10 @@ app.setName(APP_NAME);
 let tray = null;
 const watchedDir = path.join(app.getPath('pictures'), 'Screenshots');
 
+// Persistent settings live in a JSON file under userData, not in the
+// renderer's localStorage — which the OS is free to clear at any time.
+let store = null;
+
 // Read image content from the clipboard and create a file window.
 function getImageFromClipboard() {
   const image = clipboard.readImage();
@@ -127,7 +131,27 @@ function watchScreenshotDir() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // electron-store is ESM-only, so pull it in with a dynamic import.
+  const { default: Store } = await import('electron-store');
+  store = new Store({ name: 'settings' });
+
+  // The renderer keeps its settings load/save synchronous, so serve these
+  // over the synchronous IPC channel.
+  ipcMain.on('settings-get', (event) => {
+    event.returnValue = store.store;
+  });
+  ipcMain.on('settings-set', (event, data) => {
+    store.store = data;
+    event.returnValue = true;
+  });
+
+  // macOS takes the dock icon from the app bundle and ignores BrowserWindow's
+  // `icon`, so an unpackaged run would show the stock Electron icon.
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(path.join(__dirname, 'assets', 'icon.png'));
+  }
+
   createTray();
   watchScreenshotDir();
 

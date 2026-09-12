@@ -10,7 +10,8 @@
     <meta property="og:title" content="escribo — Add text and draw on images, screenshots and screen captures" />
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <link rel="icon" type="image/png" href="assets/icon.png">
+    <link rel="icon" href="assets/favicon.ico" sizes="16x16 32x32 48x48">
+    <link rel="icon" type="image/png" sizes="512x512" href="assets/icon.png">
     <link rel="stylesheet" href="src/styles.css">
 </head>
 
@@ -62,6 +63,10 @@
                 <button class="tool-btn" data-tool="mark" title="Mark — M" aria-pressed="false">
                     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M9.6 2.6l3.8 3.8-5.6 5.6H4v-3.8z"></path><path d="M2.2 14.4h11.6" stroke-linecap="round"></path></svg>
                     <span class="label">Mark</span>
+                </button>
+                <button class="tool-btn" data-tool="redact" title="Redact — R" aria-pressed="false">
+                    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.4"></rect><path fill="currentColor" d="M4.4 4.4h2.4v2.4H4.4zM9.2 4.4h2.4v2.4H9.2zM6.8 6.8h2.4v2.4H6.8zM4.4 9.2h2.4v2.4H4.4zM9.2 9.2h2.4v2.4H9.2z"></path></svg>
+                    <span class="label">Redact</span>
                 </button>
                 <button class="tool-btn" data-tool="text" title="Text — T" aria-pressed="false">
                     <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M12.258 3h-8.51l-.083 2.46h.479c.26-1.544.758-1.783 2.693-1.845l.424-.013v7.827c0 .663-.144.82-1.3.923v.52h4.082v-.52c-1.162-.103-1.306-.26-1.306-.923V3.602l.431.013c1.934.062 2.434.301 2.693 1.846h.479L12.258 3z"></path></svg>
@@ -133,7 +138,7 @@
                 <canvas id="canvas"></canvas>
                 <div id="watermark">
                     <div class="mark" aria-hidden="true"><span>e</span></div>
-                    made with escriboapp.com
+                    <span class="wm-text">made with escriboapp.com</span>
                 </div>
                 <div id="crop-layer" hidden>
                     <div id="crop-box">
@@ -292,6 +297,10 @@
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 1v2.2M8 12.8V15M15 8h-2.2M3.2 8H1M12.6 3.4l-1.55 1.55M4.95 11.05 3.4 12.6M12.6 12.6l-1.55-1.55M4.95 4.95 3.4 3.4" stroke-linecap="round"></path><circle cx="8" cy="8" r="3"></circle></svg>
                         Advanced
                     </button>
+                    <button class="prefs-tab" data-tab="watermark" role="tab" aria-selected="false">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1.9" y="4.4" width="12.2" height="7.2" rx="1.6"></rect><circle cx="5" cy="8" r="1.3" fill="currentColor" stroke="none"></circle><path d="M8.1 9.6h4" stroke-linecap="round"></path></svg>
+                        Watermark
+                    </button>
                     <button class="prefs-tab" data-tab="profiles" role="tab" aria-selected="false">
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.2 2.4 5.3 8 8.4l5.6-3.1z"></path><path d="M2.4 8.3 8 11.4l5.6-3.1" stroke-linecap="round"></path><path d="M2.4 11.2 8 14.3l5.6-3.1" stroke-linecap="round"></path></svg>
                         Profiles
@@ -330,9 +339,30 @@
                         <div id="advanced-rows"></div>
                     </section>
 
+                    <section id="tab-watermark" hidden>
+                        <div class="prefs-title">Watermark</div>
+                        <div class="prefs-note">Shown in the corner of the export while the Watermark switch in the status bar is on. Saved with the profile, so it travels when you export one.</div>
+                        <div class="segmented" id="wm-mode-seg" role="group" aria-label="Watermark style">
+                            <button type="button" data-wm-mode="default">escribo</button>
+                            <button type="button" data-wm-mode="custom">Custom text</button>
+                        </div>
+                        <input type="text" id="wm-text" class="font-custom" maxlength="120" placeholder="Your watermark text" aria-label="Custom watermark text" hidden>
+                        <div class="pop-label">Colours</div>
+                        <div class="pref-grid solid">
+                            <div class="pref-row">
+                                <input type="color" id="wm-color" aria-label="Watermark text colour">
+                                <span class="hex">Text</span>
+                            </div>
+                            <div class="pref-row">
+                                <input type="color" id="wm-bg" aria-label="Watermark background colour">
+                                <span class="hex">Background</span>
+                            </div>
+                        </div>
+                    </section>
+
                     <section id="tab-profiles" hidden>
                         <div class="prefs-title">Profiles</div>
-                        <div class="prefs-note">A profile is the global kit — the annotation palette, padding fills, label font and advanced style — and holds its own presets. The other tabs edit the active one. Export a profile to hand a teammate the whole setup.</div>
+                        <div class="prefs-note">A profile is the global kit — the annotation palette, padding fills, label font, watermark and advanced style — and holds its own presets. The other tabs edit the active one. Export a profile to hand a teammate the whole setup.</div>
                         <div id="profile-list" role="listbox" aria-label="Profiles"></div>
                         <div id="profile-form" hidden>
                             <input type="text" id="profile-name" placeholder="Profile name" maxlength="60" aria-label="Profile name">
