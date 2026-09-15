@@ -1,0 +1,57 @@
+name: Build [non production]
+
+# Sanity check on every PR and every push to master: the Linux app still
+# builds, and the (currently empty) test suite still passes. This never
+# publishes anything - it just proves the tree is releasable.
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v5
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile --network-timeout 100000
+
+      - name: Run tests
+        run: yarn test
+
+      # rpm packaging needs the rpmbuild tooling on the runner.
+      - name: Install rpm build tooling
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      # x64 only - this job just proves the build works. The release workflow
+      # builds arm64 natively on an arm runner.
+      - name: Build Linux app
+        run: yarn build --linux --x64 --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-build
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
+          if-no-files-found: error

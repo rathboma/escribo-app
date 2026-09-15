@@ -1,0 +1,136 @@
+name: Release - Publish Downloads
+
+# Runs when a release is published (publish.yml only builds and attaches assets
+# to a *draft* release). Everything user-facing happens here, gated on the
+# manual publish click:
+#   - mirror the release assets to the downloads R2 bucket under releases/<tag>/
+#     and refresh latest.json (the manifest the website resolves downloads from,
+#     served at https://download.escriboapp.com)
+#   - publish the .deb/.rpm packages to the apt/dnf repos under the deb/ and
+#     rpm/ prefixes of the same bucket (served at https://repo.escriboapp.com)
+#
+# workflow_dispatch re-runs any of it idempotently for a given tag - use it to
+# backfill the mirror or heal a partial run.
+#
+# R2 credentials come from four repo secrets: ACCESS_KEY_ID, SECRET_ACCESS_KEY,
+# ENDPOINT_URL and BUCKET_NAME.
+
+permissions:
+  contents: read
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v1.0.0)"
+        required: true
+      mirror:
+        description: "Mirror downloads to R2 + refresh latest.json"
+        type: boolean
+        default: true
+      repositories:
+        description: "Publish deb/rpm repositories"
+        type: boolean
+        default: true
+
+# Serialize near-simultaneous publishes. The mirror script's latest-release
+# guard makes any completion order converge on GitHub's canonical latest.
+concurrency:
+  group: release-published
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  # R2 wants these off for third-party S3 compatibility.
+  # https://github.com/aws/aws-sdk-ruby/issues/3166
+  AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+  AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+  AWS_DEFAULT_REGION: us-east-1
+
+jobs:
+  # Channel comes from the tag itself (v1.2.3 -> latest, v1.2.3-beta.1 -> beta)
+  # so a mis-flagged prerelease can't publish to the stable repos.
+  identify_channel:
+    runs-on: ubuntu-22.04
+    outputs:
+      channel: ${{ steps.channel.outputs.channel }}
+    steps:
+      - name: Extract channel from tag
+        id: channel
+        run: |
+          version="${TAG#v}"
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            channel=latest
+          elif [[ "$version" =~ -beta ]]; then
+            channel=beta
+          elif [[ "$version" =~ -alpha ]]; then
+            channel=alpha
+          else
+            echo "Unrecognized version: $version" >&2
+            exit 1
+          fi
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "$TAG -> $channel"
+
+  mirror_downloads:
+    if: github.event_name == 'release' || inputs.mirror
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v5
+
+      # Resolved before mirroring so a bad API response fails the run early.
+      # latest.json is only written when the published tag matches this.
+      - name: Determine latest release
+        id: latest_release
+        run: |
+          latest=$(gh api repos/rathboma/escribo-app/releases/latest --jq '.tag_name')
+          echo "Latest release: $latest"
+          echo "tag=$latest" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mirror release assets to R2
+        run: node ./.github/scripts/mirror_release_downloads.js "$TAG"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LATEST_TAG: ${{ steps.latest_release.outputs.tag }}
+          PUBLIC_BASE_URL: https://download.escriboapp.com
+          R2_BUCKET: ${{ secrets.BUCKET_NAME }}
+          R2_ENDPOINT: ${{ secrets.ENDPOINT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SECRET_ACCESS_KEY }}
+
+  publish_repositories:
+    needs: identify_channel
+    if: (github.event_name == 'release' || inputs.repositories) && needs.identify_channel.outputs.channel == 'latest'
+    runs-on: ubuntu-22.04
+    env:
+      R2_BUCKET: ${{ secrets.BUCKET_NAME }}
+      R2_ENDPOINT: ${{ secrets.ENDPOINT_URL }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SECRET_ACCESS_KEY }}
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v5
+
+      - name: Install repo tooling
+        run: |
+          sudo apt-get update && sudo apt-get install -y createrepo-c
+          sudo gem install deb-s3 -v 0.11.8
+
+      - name: Download release packages
+        run: |
+          rm -rf ./artifacts; mkdir artifacts
+          gh release download "$TAG" --repo rathboma/escribo-app \
+            --pattern '*.deb' --pattern '*.rpm' --dir ./artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish DEB repo
+        run: bash ./.github/scripts/publish_deb.sh $(find ./artifacts -type f -name '*.deb')
+
+      - name: Publish RPM repo
+        run: bash ./.github/scripts/publish_rpm.sh $(find ./artifacts -type f -name '*.rpm')

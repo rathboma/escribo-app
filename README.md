@@ -41,7 +41,7 @@ On macOS, read `Ctrl` as `⌘`.
 
 ```bash
 yarn install
-yarn start
+yarn dev        # same as `yarn start` — runs the app with electron
 ```
 
 The app lives in the system tray. It opens an annotation window automatically when a new screenshot lands in your `Pictures/Screenshots` folder, and the tray menu can also open a file or paste from the clipboard.
@@ -49,12 +49,45 @@ The app lives in the system tray. It opens an annotation window automatically wh
 ### Packaging
 
 ```bash
-yarn dist      # installers for the host OS, written to dist/
-yarn pack:dir  # unpacked app only, for a quick look
+yarn build   # installers for the host OS, written to dist/
+yarn pack    # unpacked app only, for a quick look
 ```
 
 Windows and macOS builds have to run on their own OS. The icons the installers
 apply live in [`build/`](build/README.md).
+
+## Releasing
+
+Cutting a release is one command:
+
+```bash
+yarn release   # bin/make-release.sh: bumps package.json and pushes a v* tag
+```
+
+Pushing the tag drives the CI pipeline (`.github/workflows/`):
+
+1. **`publish.yml`** builds every platform (Linux x64/arm64, Windows, macOS
+   universal) and attaches the installers to a **draft** GitHub release.
+   Signing is wired but optional — builds succeed unsigned until the signing
+   secrets are added (see the step comments in `publish.yml`).
+2. Publishing that draft (a manual click in the GitHub UI) fires
+   **`release-published.yml`**, which:
+   - mirrors every asset to the R2 bucket under `releases/<tag>/` and refreshes
+     `latest.json` — the manifest the website resolves downloads from, served at
+     `download.escriboapp.com`;
+   - publishes the `.deb`/`.rpm` packages to the apt/dnf repos under the `deb/`
+     and `rpm/` prefixes of the same bucket, served at `repo.escriboapp.com`.
+
+`build.yml` builds the Linux app and runs the tests on every PR and every push
+to `master`, purely as a check — it publishes nothing.
+
+### Deploy secrets
+
+`release-published.yml` needs four repo secrets for the R2 (S3-compatible)
+bucket: `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, `ENDPOINT_URL` and `BUCKET_NAME`.
+The deb/rpm repos are currently **unsigned** (no GPG key); add a signing key and
+wire `--sign` into `.github/scripts/publish_deb.sh` / `publish_rpm.sh` when one
+exists.
 
 ## Contributing
 

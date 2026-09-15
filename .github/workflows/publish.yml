@@ -1,0 +1,104 @@
+name: Build & Publish
+
+# Runs on a pushed v* tag (create one with `yarn release` / bin/make-release.sh).
+# Builds every platform and attaches the installers to a GitHub release, which
+# is created as a draft. Publishing that draft (a manual click in the GitHub UI)
+# triggers release-published.yml, which mirrors the downloads to R2.
+#
+# Signing is wired but optional: with no signing secrets set the builds still
+# succeed, just unsigned. Add the secrets named in the "Build & Publish" steps
+# below and signing turns on automatically - no workflow change needed.
+
+permissions:
+  contents: write # softprops + electron-builder need to write the release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  create_draft_release:
+    runs-on: ubuntu-22.04
+    outputs:
+      id: ${{ steps.create_release.outputs.id }}
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v5
+
+      - name: Create draft release
+        id: create_release
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: true
+          generate_release_notes: true
+
+  release:
+    needs: create_draft_release
+    runs-on: ${{ matrix.os.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - name: ubuntu-22.04
+            type: linux
+            arch: x64
+          - name: ubuntu-22.04-arm
+            type: linux
+            arch: arm64
+          - name: windows-2022
+            type: windows
+            arch: x64
+          - name: macos-14
+            type: macos
+            arch: universal
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v5
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+
+      # deb/rpm packaging on Linux needs rpm tooling and a system fpm (the fpm
+      # electron-builder downloads is x86_64-only, so arm64 runners need this).
+      - name: Install Linux packaging tooling
+        if: matrix.os.type == 'linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y rpm
+          sudo gem install fpm -v 1.17.0
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile --network-timeout 100000
+
+      - name: Build & Publish (Linux)
+        if: matrix.os.type == 'linux'
+        run: yarn build --linux --${{ matrix.os.arch }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          USE_SYSTEM_FPM: "true"
+
+      - name: Build & Publish (Windows)
+        if: matrix.os.type == 'windows'
+        run: yarn build --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Add WIN_CSC_LINK (base64 .pfx) + WIN_CSC_KEY_PASSWORD secrets to sign.
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Build & Publish (macOS)
+        if: matrix.os.type == 'macos'
+        run: yarn build --mac --universal --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Add these secrets to sign + notarize. Until MAC_CSC_LINK is set,
+          # CSC_IDENTITY_AUTO_DISCOVERY is false so the build stays unsigned
+          # instead of failing to find an identity.
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
