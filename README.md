@@ -49,12 +49,24 @@ The app lives in the system tray. It opens an annotation window automatically wh
 ### Packaging
 
 ```bash
-yarn dist      # installers for the host OS, written to dist/
+yarn dist      # every target for the host OS, written to dist/
 yarn pack:dir  # unpacked app only, for a quick look
 ```
 
 Windows and macOS builds have to run on their own OS. The icons the installers
 apply live in [`build/`](build/README.md).
+
+| OS | Targets |
+| --- | --- |
+| macOS | one universal `.dmg` — Apple silicon and Intel in the same file |
+| Windows | `nsis` installer and `portable`, x64 |
+| Linux | AppImage, deb, rpm and Flatpak, each on x64 and arm64 |
+
+Artifact names are pinned (`escribo-<version>-<os>-<arch>.<ext>`, and
+`-windows-installer` / `-windows-portable` for the two Windows targets) because
+the website resolves a download to a release asset by matching the end of its
+filename. Renaming a target here means editing the matching `suffix` in
+`_data/downloads.yml` in [rathboma/escribo-web](https://github.com/rathboma/escribo-web).
 
 ## Contributing
 
