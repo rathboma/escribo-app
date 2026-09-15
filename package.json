@@ -1,15 +1,104 @@
 {
-  "name": "pinkarrows",
+  "name": "escribo",
   "productName": "escribo",
   "version": "1.0.0",
   "description": "Annotate screenshots with arrows, boxes, highlights and text.",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "pack:dir": "electron-builder --dir",
+    "dist": "electron-builder"
   },
-  "repository": "git@github.com:rathboma/pinkarrows.git",
+  "repository": "git@github.com:rathboma/escribo-app.git",
   "author": "Matthew Rathbone <matthew.rathbone@gmail.com>",
   "license": "MIT",
+  "build": {
+    "appId": "com.escriboapp.escribo",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "src/**/*",
+      "assets/**/*",
+      "tray-icon.png",
+      "!assets/readme_gif.gif"
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.graphics-design",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "artifactName": "escribo-${version}-mac-${arch}.${ext}"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "artifactName": "escribo-${version}-windows-installer.${ext}"
+    },
+    "portable": {
+      "artifactName": "escribo-${version}-windows-portable.${ext}"
+    },
+    "linux": {
+      "icon": "build/icons",
+      "category": "Graphics",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "rpm",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "flatpak",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "escribo-${version}-linux-${arch}.${ext}"
+    }
+  },
   "devDependencies": {
     "electron": "^34.2.0",
     "electron-builder": "^25.1.8"

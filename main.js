@@ -146,6 +146,12 @@ app.whenReady().then(async () => {
     event.returnValue = true;
   });
 
+  // macOS takes the dock icon from the app bundle and ignores BrowserWindow's
+  // `icon`, so an unpackaged run would show the stock Electron icon.
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(path.join(__dirname, 'assets', 'icon.png'));
+  }
+
   createTray();
   watchScreenshotDir();
 
