@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, clipboard, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { setupAutoUpdater } = require('./updater');
 
 const APP_NAME = 'escribo';
 
@@ -154,6 +155,9 @@ app.whenReady().then(async () => {
 
   createTray();
   watchScreenshotDir();
+
+  // Check for updates in the background (AppImage / Windows / macOS only).
+  setupAutoUpdater();
 
   // Start with a blank window — its drop area and file picker are the way in
   // until a screenshot arrives on its own.

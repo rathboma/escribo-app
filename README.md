@@ -75,19 +75,35 @@ Pushing the tag drives the CI pipeline (`.github/workflows/`):
    - mirrors every asset to the R2 bucket under `releases/<tag>/` and refreshes
      `latest.json` — the manifest the website resolves downloads from, served at
      `download.escriboapp.com`;
-   - publishes the `.deb`/`.rpm` packages to the apt/dnf repos under the `deb/`
-     and `rpm/` prefixes of the same bucket, served at `repo.escriboapp.com`.
+   - publishes the GPG-signed `.deb`/`.rpm` packages to the apt/dnf repos under
+     the `deb/` and `rpm/` prefixes of the same bucket, served at
+     `repo.escriboapp.com`, and uploads the public key to `escribo.key`.
 
 `build.yml` builds the Linux app and runs the tests on every PR and every push
 to `master`, purely as a check — it publishes nothing.
 
+### Auto-update
+
+The app updates itself where the OS/package manager can't: Windows, macOS and
+the Linux **AppImage** update in-app via `electron-updater` (`updater.js`),
+reading the metadata `publish.yml` attaches to each GitHub release. **deb/rpm**
+installs update through `apt`/`dnf`: the `build/deb-postinstall` and
+`build/rpm-postinstall` scripts register the `repo.escriboapp.com` repo and its
+signing key at install time. macOS updates only apply once the app is signed.
+
 ### Deploy secrets
 
-`release-published.yml` needs four repo secrets for the R2 (S3-compatible)
-bucket: `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, `ENDPOINT_URL` and `BUCKET_NAME`.
-The deb/rpm repos are currently **unsigned** (no GPG key); add a signing key and
-wire `--sign` into `.github/scripts/publish_deb.sh` / `publish_rpm.sh` when one
-exists.
+`release-published.yml` needs:
+
+- Four R2 (S3-compatible) bucket secrets: `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`,
+  `ENDPOINT_URL`, `BUCKET_NAME`.
+- `GPG_PRIVATE_KEY` — the armoured, passphrase-less private key that signs the
+  apt/dnf repos. Its public half is committed at `build/escribo.key` and baked
+  into the deb/rpm postinstall scripts, so **the signing key must be in place
+  before the first stable release** — the repo publish refuses to ship an
+  unsigned repo, because installed packages pin `signed-by` / `gpgcheck=1`.
+
+Optional code-signing secrets (mac/win) are documented inline in `publish.yml`.
 
 ## Contributing
 

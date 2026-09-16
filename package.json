@@ -32,6 +32,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "updater.js",
       "index.html",
       "src/**/*",
       "assets/**/*",
@@ -97,10 +98,12 @@
       "artifactName": "${name}-${version}-linux-${arch}.${ext}"
     },
     "deb": {
-      "artifactName": "${name}-${version}-linux-${arch}.${ext}"
+      "artifactName": "${name}-${version}-linux-${arch}.${ext}",
+      "afterInstall": "build/deb-postinstall"
     },
     "rpm": {
-      "artifactName": "${name}-${version}-linux-${arch}.${ext}"
+      "artifactName": "${name}-${version}-linux-${arch}.${ext}",
+      "afterInstall": "build/rpm-postinstall"
     },
     "appImage": {
       "artifactName": "${name}-${version}-linux-${arch}.${ext}"
@@ -111,6 +114,7 @@
     "electron-builder": "^25.1.8"
   },
   "dependencies": {
-    "electron-store": "^11.0.2"
+    "electron-store": "^11.0.2",
+    "electron-updater": "^6.3.9"
   }
 }

@@ -118,8 +118,17 @@ jobs:
 
       - name: Install repo tooling
         run: |
-          sudo apt-get update && sudo apt-get install -y createrepo-c
+          sudo apt-get update && sudo apt-get install -y createrepo-c rpm
           sudo gem install deb-s3 -v 0.11.8
+
+      # Imports GPG_PRIVATE_KEY (armoured, passphrase-less) and exposes its key
+      # id. The repo signatures must match the public key baked into the deb/rpm
+      # postinstall scripts, so this secret is required for a stable publish.
+      - name: Import signing key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
 
       - name: Download release packages
         run: |
@@ -131,6 +140,10 @@ jobs:
 
       - name: Publish DEB repo
         run: bash ./.github/scripts/publish_deb.sh $(find ./artifacts -type f -name '*.deb')
+        env:
+          GPG_KEY_ID: ${{ steps.import_gpg.outputs.keyid }}
 
       - name: Publish RPM repo
         run: bash ./.github/scripts/publish_rpm.sh $(find ./artifacts -type f -name '*.rpm')
+        env:
+          GPG_KEY_ID: ${{ steps.import_gpg.outputs.keyid }}
