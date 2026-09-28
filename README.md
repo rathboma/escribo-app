@@ -68,6 +68,44 @@ the website resolves a download to a release asset by matching the end of its
 filename. Renaming a target here means editing the matching `suffix` in
 `_data/downloads.yml` in [rathboma/escribo-web](https://github.com/rathboma/escribo-web).
 
+## Licensing
+
+escribo is free for personal use, and Pro and Business are one license per
+device, sold at [escriboapp.com/buy](https://escriboapp.com/buy/). The app still
+never connects to anything, so a license is checked on the device itself:
+
+1. **Preferences → License** shows this machine's device code: a salted hash of
+   the OS's machine ID (`IOPlatformUUID` on macOS, `MachineGuid` on Windows,
+   `/etc/machine-id` on Linux and in Flatpak), so the ID itself never leaves
+   the machine. Its last character is a check character, which lets the website
+   catch a typo.
+2. **Get an activation code** opens escriboapp.com/activate with the device code
+   filled in. The license key goes in there, and the site hands back an
+   activation code for that one device, signed with escribo's Ed25519 key. A key
+   is only ever tied to one device at a time; moving it means releasing it from
+   the buyer's account page first.
+3. Pasting the code in stores it in `license.json` under the app's userData,
+   apart from the settings, so restoring defaults never takes a license with it.
+   It is verified on every launch against the public keys in `src/license.js`
+   and this machine's device code, so a copy on another machine does nothing.
+
+**Before shipping a build**, put the public key from `npm run keygen` in
+[rathboma/escribo-web](https://github.com/rathboma/escribo-web)'s `worker/`
+into `ACTIVATION_PUBLIC_KEYS` in `src/license.js`. Until then the app can't
+activate anything, and says so. The formats are shared with that Worker, and
+`yarn test` checks this side against the same vectors it uses
+(`test/fixtures/activation.json`).
+
+To try activation against a local copy of the site, run escribo-web's
+`bin/dev` and start the app with the two variables it prints:
+`ESCRIBO_SITE_URL` points "Get an activation code" at the local site, and
+`ESCRIBO_ACTIVATION_PUBLIC_KEY` trusts the key that site signs with. Only a
+run from source reads them; a packaged build ignores both.
+
+The renderer sees the result as `ui.license` in `src/script.js`:
+`{ deviceCode, activation: { plan, licenseId, major, issuedAt } | null, problem }`.
+Nothing is gated on it yet.
+
 ## Contributing
 
 Easiest way to contribute is to toss ideas and features in Github Issues.

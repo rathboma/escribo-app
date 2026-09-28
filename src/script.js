@@ -203,7 +203,9 @@ const ui = {
   zoom: 0,
   prefsTab: 'annotate',
   pendingEmoji: null,
-  editingText: false
+  editingText: false,
+  // What src/license.js says about this device: { deviceCode, activation, problem }.
+  license: null
 };
 
 let img = null;        // HTMLImageElement holding the full-resolution source
@@ -2057,7 +2059,9 @@ function setPrefsTab(tab) {
   $('#tab-advanced').hidden = tab !== 'advanced';
   $('#tab-watermark').hidden = tab !== 'watermark';
   $('#tab-profiles').hidden = tab !== 'profiles';
+  $('#tab-license').hidden = tab !== 'license';
   if (tab !== 'profiles') closeProfileForm();
+  if (tab === 'license') refreshLicense();
 }
 
 function openPrefs(tab) {
@@ -2070,6 +2074,90 @@ function openPrefs(tab) {
 function closePrefs() {
   el.prefs.hidden = true;
   closeProfileForm();
+}
+
+/* ==========================================================================
+   License
+   ========================================================================== */
+
+// The main process checks activation codes against this machine's device
+// code (src/license.js); this is only the tab that shows what it says.
+
+const PLAN_NAMES = { pro: 'escribo Pro', business: 'escribo Business' };
+
+const LICENSE_PROBLEMS = {
+  empty: 'Paste an activation code first.',
+  'license-key': 'That is a license key. Click “Get an activation code”, enter the key on the page that opens, and paste the code it gives you here.',
+  format: "That doesn't look like an activation code. Copy the whole code from the activation page and paste it again.",
+  'no-keys': "This build of escribo can't check activation codes. Download the latest one from escriboapp.com.",
+  signature: "That activation code isn't valid. Copy it again from the activation page, all of it.",
+  device: 'That activation code is for a different device. Get one for this device code instead.',
+  version: 'That license is for an earlier version of escribo, so it needs a license for this one.'
+};
+
+// A saved code that stopped checking out, like a settings folder copied from
+// another computer.
+const SAVED_PROBLEMS = {
+  device: 'The saved license was activated on a different device, so this one is on Personal. Activate a license for this device below.',
+  version: 'The saved license is for an earlier version of escribo, so this one is on Personal.'
+};
+
+function refreshLicense() {
+  if (!isDesktop || !window.electronAPI.license) return Promise.resolve(null);
+  return window.electronAPI.license.status().then((status) => {
+    ui.license = status;
+    renderLicenseTab();
+    return status;
+  });
+}
+
+function showLicenseError(message) {
+  const box = $('#license-error');
+  box.textContent = message || '';
+  box.hidden = !message;
+}
+
+function renderLicenseTab() {
+  const status = ui.license;
+  if (!status) return;
+  const { activation, problem } = status;
+
+  $('#license-device-code').textContent = status.deviceCode;
+  $('#license-card').hidden = !activation;
+  $('#license-form').hidden = !!activation;
+  if (activation) {
+    const since = new Date(activation.issuedAt * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    $('#license-plan').textContent = PLAN_NAMES[activation.plan] || activation.plan;
+    $('#license-meta').textContent = `Activated on this device since ${since} · ${activation.licenseId}`;
+    $('#license-summary').textContent = `Licensed for work on this device, for every escribo ${activation.major}.x release. Nothing is checked online.`;
+  } else {
+    $('#license-summary').textContent = SAVED_PROBLEMS[problem]
+      || 'Personal: free for personal, non-commercial use. Using escribo for work takes a Pro or Business license for each device.';
+  }
+}
+
+function activateLicense() {
+  const code = $('#license-code').value;
+  showLicenseError('');
+  window.electronAPI.license.activate(code).then((result) => {
+    if (!result.ok) {
+      showLicenseError(LICENSE_PROBLEMS[result.reason] || LICENSE_PROBLEMS.format);
+      return;
+    }
+    $('#license-code').value = '';
+    ui.license = result.status;
+    renderLicenseTab();
+    toast(`${PLAN_NAMES[result.status.activation.plan]} activated`);
+  });
+}
+
+function removeLicense() {
+  const question = 'Remove the license from this device? escribo goes back to Personal here, and the license can be released from your account on escriboapp.com and activated on another device.';
+  if (!window.confirm(question)) return;
+  window.electronAPI.license.remove().then((status) => {
+    ui.license = status;
+    renderLicenseTab();
+  });
 }
 
 /* ==========================================================================
@@ -2131,6 +2219,17 @@ $('#prefs-done').addEventListener('click', closePrefs);
 el.prefs.addEventListener('click', (e) => { if (e.target === el.prefs) closePrefs(); });
 document.querySelectorAll('.prefs-tab').forEach((btn) => {
   btn.addEventListener('click', () => setPrefsTab(btn.dataset.tab));
+});
+$('#license-open').addEventListener('click', () => window.electronAPI.license.openActivationPage());
+$('#license-activate').addEventListener('click', activateLicense);
+$('#license-remove').addEventListener('click', removeLicense);
+$('#license-device-copy').addEventListener('click', (e) => {
+  const button = e.currentTarget;
+  if (!ui.license) return;
+  navigator.clipboard.writeText(ui.license.deviceCode).then(() => {
+    button.textContent = 'Copied';
+    setTimeout(() => { button.textContent = 'Copy'; }, 1400);
+  });
 });
 
 $('#prefs-reset').addEventListener('click', () => {
@@ -2409,6 +2508,9 @@ syncWatermarkUI();
 refreshWatermarkPreview();
 syncPresetsUI(true);
 setPrefsTab('annotate');
+// There is nothing to license in the web version, which has no device code.
+document.querySelector('.prefs-tab[data-tab="license"]').hidden = !isDesktop;
+refreshLicense();
 
 // Shortcut labels follow the platform's modifier key.
 $('#prefs-open').title = `Preferences — ${MOD},`;
