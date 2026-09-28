@@ -4,7 +4,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fixture = require('./fixtures/activation.json');
-const { base32, deviceCodeFromMachineId, formatDeviceCode, readMachineId, verifyActivation } = require('../src/license.js');
+const {
+  base32,
+  deviceCodeFromMachineId,
+  formatDeviceCode,
+  publicKeyFromBase64,
+  readMachineId,
+  verifyActivation
+} = require('../src/license.js');
 
 const [HERE, THERE] = fixture.devices;
 const keys = { publicKeys: [fixture.publicKey] };
@@ -63,6 +70,12 @@ test('any of several public keys will do, for rotating keys', () => {
   const { publicKey } = require('crypto').generateKeyPairSync('ed25519');
   const newer = publicKey.export({ type: 'spki', format: 'pem' });
   assert.equal(verifyActivation(code, HERE.deviceCode, { publicKeys: [newer, fixture.publicKey] }).ok, true);
+});
+
+test("a one-line base64 key, as bin/dev prints it, reads the same as the PEM", () => {
+  const base64 = fixture.publicKey.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+  assert.equal(publicKeyFromBase64(base64), fixture.publicKey);
+  assert.equal(verifyActivation(code, HERE.deviceCode, { publicKeys: [publicKeyFromBase64(` ${base64}\n`)] }).ok, true);
 });
 
 test('a license for 1.x does not activate 2.x', () => {

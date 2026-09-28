@@ -100,6 +100,15 @@ async function readMachineId(platform = process.platform) {
   return id ? id.trim().toLowerCase() : null;
 }
 
+/**
+ * A public key given as the base64 of its SPKI encoding — one line, as
+ * escribo-web's bin/dev prints it — in the PEM form the keys above use.
+ */
+function publicKeyFromBase64(base64) {
+  const body = String(base64).replace(/\s+/g, '').match(/.{1,64}/g).join('\n');
+  return `-----BEGIN PUBLIC KEY-----\n${body}\n-----END PUBLIC KEY-----`;
+}
+
 function fromBase64url(text) {
   return Buffer.from(text.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 }
@@ -158,6 +167,7 @@ module.exports = {
   base32,
   deviceCodeFromMachineId,
   formatDeviceCode,
+  publicKeyFromBase64,
   readMachineId,
   verifyActivation
 };

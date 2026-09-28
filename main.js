@@ -42,12 +42,31 @@ function appMajor() {
   return Number.parseInt(app.getVersion(), 10) || 1;
 }
 
+// Run from source (`yarn start`), escribo can be pointed at a copy of the
+// site running locally, like the one escribo-web's bin/dev starts, and trust
+// the key that copy signs with. A packaged build ignores both.
+//   ESCRIBO_SITE_URL=http://localhost:8787
+//   ESCRIBO_ACTIVATION_PUBLIC_KEY=<the key bin/dev prints>
+const devSiteUrl = !app.isPackaged && process.env.ESCRIBO_SITE_URL;
+const devPublicKey = !app.isPackaged && process.env.ESCRIBO_ACTIVATION_PUBLIC_KEY;
+
+function verifyOptions() {
+  const publicKeys = devPublicKey
+    ? [...license.ACTIVATION_PUBLIC_KEYS, license.publicKeyFromBase64(devPublicKey)]
+    : license.ACTIVATION_PUBLIC_KEYS;
+  return { appMajor: appMajor(), publicKeys };
+}
+
+function activateUrl() {
+  return devSiteUrl ? new URL('/activate/', devSiteUrl).toString() : license.ACTIVATE_URL;
+}
+
 // Checked from scratch every time, so a license file copied over from
 // another machine, or kept from an older major version, does nothing.
 async function licenseStatus() {
   const code = await getDeviceCode();
   const saved = licenseStore.get('activation');
-  const result = saved ? license.verifyActivation(saved, code, { appMajor: appMajor() }) : null;
+  const result = saved ? license.verifyActivation(saved, code, verifyOptions()) : null;
   return {
     deviceCode: license.formatDeviceCode(code),
     activation: result && result.ok ? result.activation : null,
@@ -197,7 +216,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('license-status', () => licenseStatus());
 
   ipcMain.handle('license-activate', async (event, code) => {
-    const result = license.verifyActivation(code, await getDeviceCode(), { appMajor: appMajor() });
+    const result = license.verifyActivation(code, await getDeviceCode(), verifyOptions());
     if (!result.ok) return { ok: false, reason: result.reason };
     licenseStore.set('activation', String(code).replace(/\s+/g, ''));
     return { ok: true, status: await licenseStatus() };
@@ -212,7 +231,7 @@ app.whenReady().then(async () => {
   // in. The only way escribo ever sends anything is the person doing it.
   ipcMain.handle('license-open-activation', async () => {
     const code = license.formatDeviceCode(await getDeviceCode());
-    await shell.openExternal(`${license.ACTIVATE_URL}?device=${encodeURIComponent(code)}`);
+    await shell.openExternal(`${activateUrl()}?device=${encodeURIComponent(code)}`);
   });
 
   // macOS takes the dock icon from the app bundle and ignores BrowserWindow's

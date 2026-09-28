@@ -96,6 +96,12 @@ activate anything, and says so. The formats are shared with that Worker, and
 `yarn test` checks this side against the same vectors it uses
 (`test/fixtures/activation.json`).
 
+To try activation against a local copy of the site, run escribo-web's
+`bin/dev` and start the app with the two variables it prints:
+`ESCRIBO_SITE_URL` points "Get an activation code" at the local site, and
+`ESCRIBO_ACTIVATION_PUBLIC_KEY` trusts the key that site signs with. Only a
+run from source reads them; a packaged build ignores both.
+
 The renderer sees the result as `ui.license` in `src/script.js`:
 `{ deviceCode, activation: { plan, licenseId, major, issuedAt } | null, problem }`.
 Nothing is gated on it yet.
