@@ -2057,6 +2057,9 @@ function setPrefsTab(tab) {
   $('#tab-advanced').hidden = tab !== 'advanced';
   $('#tab-watermark').hidden = tab !== 'watermark';
   $('#tab-profiles').hidden = tab !== 'profiles';
+  $('#tab-updates').hidden = tab !== 'updates';
+  // Restoring defaults resets the profile, which the Updates tab isn't part of.
+  $('#prefs-reset').hidden = tab === 'updates';
   if (tab !== 'profiles') closeProfileForm();
 }
 
@@ -2070,6 +2073,87 @@ function openPrefs(tab) {
 function closePrefs() {
   el.prefs.hidden = true;
   closeProfileForm();
+}
+
+/* ==========================================================================
+   Updates — looked for and installed by the main process (updater.js); the
+   windows show where it has got to, in the title bar and Preferences.
+   Desktop only: the web version is always the latest.
+   ========================================================================== */
+
+const updates = isDesktop ? window.electronAPI.updates : null;
+let updateState = null;
+
+// Why a build that can't replace itself points at the download page.
+const UPDATE_BY_HAND = {
+  portable: 'The portable exe can’t replace itself, so download the new one and use it instead.',
+  package: 'Download the new package and install it over this one.',
+  flatpak: 'Download the new Flatpak bundle and install it over this one.',
+  appimage: 'escribo can’t write to the folder this AppImage is in, so download the new one.',
+  mac: 'escribo can’t replace itself where it is: move it to Applications, or download the new version.'
+};
+
+function updateAbout(s) {
+  if (s.build === 'dev') return `This is escribo ${s.version}, run from source.`;
+  if (s.selfUpdate) return `This is escribo ${s.version}. New versions download in the background and install the next time escribo restarts.`;
+  return `This is escribo ${s.version}. This copy can’t update itself, so escribo lets you know when a new version is out.`;
+}
+
+function updateStatusText(s) {
+  switch (s.status) {
+    case 'checking': return 'Checking for updates…';
+    case 'latest': return 'You have the latest version.';
+    case 'downloading': return `Downloading escribo ${s.next}… ${s.percent || 0}%`;
+    case 'ready': return `escribo ${s.next} is ready. Restart to finish updating.`;
+    case 'available':
+      return s.selfUpdate
+        ? `escribo ${s.next} is out, but it couldn’t be installed automatically.`
+        : `escribo ${s.next} is out. ${UPDATE_BY_HAND[s.build] || ''}`;
+    case 'error': return 'Couldn’t check for updates.';
+    default:
+      if (s.build === 'dev') return 'A development build doesn’t look for updates.';
+      return s.auto ? 'Not checked yet.' : 'Automatic checks are off.';
+  }
+}
+
+function renderUpdates(s) {
+  updateState = s;
+  // Something to act on: a restart into a downloaded update, or a download.
+  const actionable = s.status === 'ready' || s.status === 'available';
+
+  const pill = $('#update-pill');
+  pill.hidden = !actionable;
+  $('#update-pill-label').textContent = s.status === 'ready' ? 'Restart to update' : 'Download update';
+  pill.title = s.status === 'ready'
+    ? `escribo ${s.next} is ready — restart to finish updating`
+    : `escribo ${s.next} is out — download it`;
+
+  $('#update-about').textContent = updateAbout(s);
+  $('#update-status-text').textContent = updateStatusText(s);
+  const error = $('#update-status-error');
+  error.hidden = !s.error || !(s.status === 'error' || (s.status === 'available' && s.selfUpdate));
+  error.textContent = s.error || '';
+
+  // One button: the thing to do next, or another look.
+  const action = $('#update-action');
+  action.hidden = s.build === 'dev';
+  action.classList.toggle('primary', actionable);
+  action.textContent = s.status === 'ready' ? 'Restart now' : s.status === 'available' ? 'Download' : 'Check now';
+  action.disabled = s.status === 'checking' || s.status === 'downloading';
+  $('#update-auto').checked = s.auto;
+}
+
+if (updates) {
+  updates.onChange(renderUpdates);
+  updates.state().then(renderUpdates);
+  $('#update-pill').addEventListener('click', () => updates.apply());
+  $('#update-action').addEventListener('click', () => {
+    if (updateState && (updateState.status === 'ready' || updateState.status === 'available')) updates.apply();
+    else updates.check();
+  });
+  $('#update-auto').addEventListener('change', (e) => updates.setAuto(e.target.checked));
+} else {
+  document.querySelector('.prefs-tab[data-tab="updates"]').hidden = true;
 }
 
 /* ==========================================================================

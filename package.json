@@ -18,9 +18,17 @@
       "buildResources": "build",
       "output": "dist"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "rathboma",
+        "repo": "escribo-app"
+      }
+    ],
     "files": [
       "main.js",
       "preload.js",
+      "updater.js",
       "index.html",
       "src/**/*",
       "assets/**/*",
@@ -33,6 +41,12 @@
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "universal"
           ]
@@ -104,6 +118,7 @@
     "electron-builder": "^25.1.8"
   },
   "dependencies": {
-    "electron-store": "^11.0.2"
+    "electron-store": "^11.0.2",
+    "electron-updater": "^6.8.9"
   }
 }

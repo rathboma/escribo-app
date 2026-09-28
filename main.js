@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, clipboard, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const updater = require('./updater');
 
 const APP_NAME = 'escribo';
 
@@ -80,9 +81,9 @@ function createFileWindow(filePath) {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      // The app makes no network requests of its own, and this keeps Electron
-      // from making one on its behalf: with spellcheck on, it downloads
-      // dictionaries from a Google CDN on Windows and Linux.
+      // Updates (updater.js) are all the app goes online for, and this keeps
+      // Electron from going online on its behalf: with spellcheck on, it
+      // downloads dictionaries from a Google CDN on Windows and Linux.
       spellcheck: false
     }
   });
@@ -102,14 +103,22 @@ function createFileWindow(filePath) {
 // Create a system tray icon with a context menu.
 function createTray() {
   tray = new Tray(path.join(__dirname, 'tray-icon.png')); // Ensure this file exists.
-  const contextMenu = Menu.buildFromTemplate([
+  tray.setToolTip(APP_NAME);
+  refreshTrayMenu();
+}
+
+// Rebuilt whenever the update state changes, so an update that is waiting on
+// a restart, or on a download by hand, gets a line at the top.
+function refreshTrayMenu() {
+  if (!tray) return;
+  const update = updater.menuItem();
+  tray.setContextMenu(Menu.buildFromTemplate([
+    ...(update ? [update, { type: 'separator' }] : []),
     { label: 'New window', click: () => { createFileWindow(); } },
     { label: 'Choose file', click: () => { triggerFromDialog(); } },
     { label: 'Paste from clipboard', click: () => { triggerFromClipboard(); } },
     { label: 'Quit', click: () => { app.quit(); } }
-  ]);
-  tray.setToolTip(APP_NAME);
-  tray.setContextMenu(contextMenu);
+  ]));
 }
 
 function watchScreenshotDir() {
@@ -158,6 +167,11 @@ app.whenReady().then(async () => {
 
   createTray();
   watchScreenshotDir();
+
+  // Whether to check automatically is kept apart from the renderer's settings,
+  // which each window writes back whole: a window opened before the switch
+  // was flipped would otherwise flip it back.
+  updater.start(new Store({ name: 'updates' }), refreshTrayMenu);
 
   // Start with a blank window — its drop area and file picker are the way in
   // until a screenshot arrives on its own.

@@ -58,15 +58,73 @@ apply live in [`build/`](build/README.md).
 
 | OS | Targets |
 | --- | --- |
-| macOS | one universal `.dmg` — Apple silicon and Intel in the same file |
+| macOS | one universal `.dmg` — Apple silicon and Intel in the same file — and the same app as a `.zip`, which is what updates are installed from |
 | Windows | `nsis` installer and `portable`, x64 |
 | Linux | AppImage, deb, rpm and Flatpak, each on x64 and arm64 |
 
 Artifact names are pinned (`escribo-<version>-<os>-<arch>.<ext>`, and
 `-windows-installer` / `-windows-portable` for the two Windows targets) because
 the website resolves a download to a release asset by matching the end of its
-filename. Renaming a target here means editing the matching `suffix` in
+filename. On Linux, electron-builder spells `<arch>` the way each format does,
+so the files come out as:
+
+| | Intel | ARM |
+| --- | --- | --- |
+| AppImage | `-linux-x86_64.AppImage` | `-linux-arm64.AppImage` |
+| deb | `-linux-amd64.deb` | `-linux-arm64.deb` |
+| rpm | `-linux-x86_64.rpm` | `-linux-aarch64.rpm` |
+| Flatpak | `-linux-x86_64.flatpak` | `-linux-aarch64.flatpak` |
+
+Renaming a target here means editing the matching `suffix` in
 `_data/downloads.yml` in [rathboma/escribo-web](https://github.com/rathboma/escribo-web).
+
+### Updates
+
+[`updater.js`](updater.js) looks for a newer release on GitHub shortly after
+launch and every six hours after that, using
+[electron-updater](https://www.electron.build/auto-update). What it does with
+one depends on the build:
+
+| Build | When a new release is out |
+| --- | --- |
+| macOS app | downloads it in the background and installs it on restart — once the app is signed, see below |
+| Windows installer | downloads it in the background and installs it on restart |
+| AppImage | downloads it in the background and swaps the `.AppImage` on restart |
+| Windows portable, deb, rpm, Flatpak | says it is out and links to the download page, since nothing can swap them in place |
+
+A waiting update shows as a button in the title bar and a line in the tray
+menu. **Preferences → Updates** has the version, the state of the last check,
+a Check now button and the switch that turns the automatic check off. An
+update that has downloaded also goes in whenever the app quits.
+
+Checking for and downloading updates are the only network requests the app
+makes, and they send nothing that identifies the install: electron-updater's
+per-install staging id is replaced with a fixed one. The website's privacy
+policy says as much, so keep the two in step.
+
+For a release to be offered to anyone, it has to be published (electron-updater
+doesn't see drafts) and carry what electron-builder writes next to the
+installers:
+
+- `latest-mac.yml`, `latest.yml`, `latest-linux.yml` and
+  `latest-linux-arm64.yml`, which tell each platform the newest version and
+  where its file is
+- the Mac `.zip`, which updates are installed from (the `.dmg` is only for
+  first installs)
+- the `.blockmap` files, which let an update download only what changed (an
+  AppImage carries its own)
+
+`yarn dist --publish always`, with a `GH_TOKEN` that can write to the repo,
+uploads all of it with the installers, into a draft release for `v<version>`.
+
+Two caveats:
+
+- **macOS** only installs an update into a signed app. Until the builds are
+  signed, the Mac app finds updates but falls back to the download page.
+- **AppImage** updates are written next to the running file under the new
+  version's name, and the old file is deleted. Renamed to something without a
+  version number (`escribo.AppImage`, say), it is replaced in place instead,
+  which keeps a launcher that points at it working.
 
 ## Contributing
 
