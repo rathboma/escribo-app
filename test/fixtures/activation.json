@@ -1,0 +1,26 @@
+{
+  "_comment": "Test vectors shared by escribo-web/worker and escribo-app. The key pair is for tests only and signs nothing real.",
+  "privateKey": "MC4CAQAwBQYDK2VwBCIEIGmpb554dGxEcwGxP9x+Rd/Yh73Q0nhnU4b0wGeJXX7i",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAnAdDcdWuz62H0EYnNEjYeN0X1MS4+1raHO6gGjNM3zU=\n-----END PUBLIC KEY-----",
+  "devices": [
+    {
+      "machineId": "escribo-test-machine-1",
+      "deviceCode": "V14YSQP1WW7GHAXX"
+    },
+    {
+      "machineId": "escribo-test-machine-2",
+      "deviceCode": "TTCZM0J47SWK901D"
+    }
+  ],
+  "activation": {
+    "payload": {
+      "v": 1,
+      "lid": "lic_fixture0000000001",
+      "plan": "pro",
+      "dev": "V14YSQP1WW7GHAXX",
+      "major": 1,
+      "iat": 1790000000
+    },
+    "code": "eyJ2IjoxLCJsaWQiOiJsaWNfZml4dHVyZTAwMDAwMDAwMDEiLCJwbGFuIjoicHJvIiwiZGV2IjoiVjE0WVNRUDFXVzdHSEFYWCIsIm1ham9yIjoxLCJpYXQiOjE3OTAwMDAwMDB9.invFyEQCBGXvPWEdmHokjn8IUzrabEwc81aK2UAZD7OV8xBh8IkHpqNp1Im2DImech-kkCJQGzyKps0CsqmSCA"
+  }
+}

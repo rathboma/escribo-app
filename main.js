@@ -1,6 +1,8 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, clipboard, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, clipboard, dialog, shell } = require('electron');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const license = require('./src/license.js');
 
 const APP_NAME = 'escribo';
 
@@ -12,6 +14,46 @@ const watchedDir = path.join(app.getPath('pictures'), 'Screenshots');
 // Persistent settings live in a JSON file under userData, not in the
 // renderer's localStorage — which the OS is free to clear at any time.
 let store = null;
+
+// The activation code lives in a file of its own, so restoring the default
+// settings, or importing a profile, can never take a license with it.
+let licenseStore = null;
+let deviceCode = null;
+
+// This machine's device code, worked out once per launch. A machine whose ID
+// can't be read gets a random one instead, kept with the license so the code
+// stays the same from one launch to the next.
+async function getDeviceCode() {
+  if (deviceCode) return deviceCode;
+  let id = await license.readMachineId();
+  if (!id) {
+    id = licenseStore.get('installId');
+    if (!id) {
+      id = crypto.randomUUID();
+      licenseStore.set('installId', id);
+    }
+  }
+  deviceCode = license.deviceCodeFromMachineId(id);
+  return deviceCode;
+}
+
+// A license is for a major version: 1.x licenses unlock every 1.x release.
+function appMajor() {
+  return Number.parseInt(app.getVersion(), 10) || 1;
+}
+
+// Checked from scratch every time, so a license file copied over from
+// another machine, or kept from an older major version, does nothing.
+async function licenseStatus() {
+  const code = await getDeviceCode();
+  const saved = licenseStore.get('activation');
+  const result = saved ? license.verifyActivation(saved, code, { appMajor: appMajor() }) : null;
+  return {
+    deviceCode: license.formatDeviceCode(code),
+    activation: result && result.ok ? result.activation : null,
+    problem: result && !result.ok ? result.reason : null
+  };
+}
 
 // Read image content from the clipboard and create a file window.
 function getImageFromClipboard() {
@@ -148,6 +190,29 @@ app.whenReady().then(async () => {
   ipcMain.on('settings-set', (event, data) => {
     store.store = data;
     event.returnValue = true;
+  });
+
+  licenseStore = new Store({ name: 'license' });
+
+  ipcMain.handle('license-status', () => licenseStatus());
+
+  ipcMain.handle('license-activate', async (event, code) => {
+    const result = license.verifyActivation(code, await getDeviceCode(), { appMajor: appMajor() });
+    if (!result.ok) return { ok: false, reason: result.reason };
+    licenseStore.set('activation', String(code).replace(/\s+/g, ''));
+    return { ok: true, status: await licenseStatus() };
+  });
+
+  ipcMain.handle('license-remove', () => {
+    licenseStore.delete('activation');
+    return licenseStatus();
+  });
+
+  // Opens the activation page in the browser, with this device's code filled
+  // in. The only way escribo ever sends anything is the person doing it.
+  ipcMain.handle('license-open-activation', async () => {
+    const code = license.formatDeviceCode(await getDeviceCode());
+    await shell.openExternal(`${license.ACTIVATE_URL}?device=${encodeURIComponent(code)}`);
   });
 
   // macOS takes the dock icon from the app bundle and ignores BrowserWindow's
