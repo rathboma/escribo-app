@@ -79,7 +79,11 @@ function createFileWindow(filePath) {
       // Use a preload script to expose IPC safely in the renderer.
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      // The app makes no network requests of its own, and this keeps Electron
+      // from making one on its behalf: with spellcheck on, it downloads
+      // dictionaries from a Google CDN on Windows and Linux.
+      spellcheck: false
     }
   });
 
