@@ -45,29 +45,35 @@
       "target": [
         {
           "target": "dmg",
-          "arch": "universal"
+          "arch": [
+            "universal"
+          ]
         }
       ],
-      "artifactName": "${name}-${version}-mac-${arch}.${ext}"
+      "artifactName": "escribo-${version}-mac-${arch}.${ext}"
     },
     "win": {
       "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
-          "arch": "x64"
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": "x64"
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
     "nsis": {
-      "artifactName": "${name}-${version}-windows-installer.${ext}"
+      "artifactName": "escribo-${version}-windows-installer.${ext}"
     },
     "portable": {
-      "artifactName": "${name}-${version}-windows-portable.${ext}"
+      "artifactName": "escribo-${version}-windows-portable.${ext}"
     },
     "linux": {
       "icon": "build/icons",
@@ -93,20 +99,27 @@
             "x64",
             "arm64"
           ]
+        },
+        {
+          "target": "flatpak",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
-      "artifactName": "${name}-${version}-linux-${arch}.${ext}"
+      "artifactName": "escribo-${version}-linux-${arch}.${ext}"
     },
     "deb": {
-      "artifactName": "${name}-${version}-linux-${arch}.${ext}",
+      "artifactName": "escribo-${version}-linux-${arch}.${ext}",
       "afterInstall": "build/deb-postinstall"
     },
     "rpm": {
-      "artifactName": "${name}-${version}-linux-${arch}.${ext}",
+      "artifactName": "escribo-${version}-linux-${arch}.${ext}",
       "afterInstall": "build/rpm-postinstall"
     },
     "appImage": {
-      "artifactName": "${name}-${version}-linux-${arch}.${ext}"
+      "artifactName": "escribo-${version}-linux-${arch}.${ext}"
     }
   },
   "devDependencies": {

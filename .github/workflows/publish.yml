@@ -63,11 +63,14 @@ jobs:
 
       # deb/rpm packaging on Linux needs rpm tooling and a system fpm (the fpm
       # electron-builder downloads is x86_64-only, so arm64 runners need this).
+      # The flatpak target needs flatpak-builder plus the flathub remote, which
+      # it pulls the Freedesktop runtime and Electron base app from.
       - name: Install Linux packaging tooling
         if: matrix.os.type == 'linux'
         run: |
-          sudo apt-get update && sudo apt-get install -y rpm
+          sudo apt-get update && sudo apt-get install -y rpm flatpak flatpak-builder
           sudo gem install fpm -v 1.17.0
+          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile --network-timeout 100000
