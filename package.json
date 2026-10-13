@@ -6,8 +6,12 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "pack:dir": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dev": "electron .",
+    "pack": "electron-builder --dir",
+    "build": "electron-builder",
+    "dist": "electron-builder",
+    "release": "bash ./bin/make-release.sh",
+    "test": "echo \"No tests yet\" && exit 0"
   },
   "repository": "git@github.com:rathboma/escribo-app.git",
   "author": "Matthew Rathbone <matthew.rathbone@gmail.com>",
@@ -18,9 +22,17 @@
       "buildResources": "build",
       "output": "dist"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "rathboma",
+        "repo": "escribo-app"
+      }
+    ],
     "files": [
       "main.js",
       "preload.js",
+      "updater.js",
       "index.html",
       "src/**/*",
       "assets/**/*",
@@ -97,6 +109,17 @@
         }
       ],
       "artifactName": "escribo-${version}-linux-${arch}.${ext}"
+    },
+    "deb": {
+      "artifactName": "escribo-${version}-linux-${arch}.${ext}",
+      "afterInstall": "build/deb-postinstall"
+    },
+    "rpm": {
+      "artifactName": "escribo-${version}-linux-${arch}.${ext}",
+      "afterInstall": "build/rpm-postinstall"
+    },
+    "appImage": {
+      "artifactName": "escribo-${version}-linux-${arch}.${ext}"
     }
   },
   "devDependencies": {
@@ -104,6 +127,7 @@
     "electron-builder": "^25.1.8"
   },
   "dependencies": {
-    "electron-store": "^11.0.2"
+    "electron-store": "^11.0.2",
+    "electron-updater": "^6.3.9"
   }
 }

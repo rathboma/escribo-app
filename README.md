@@ -41,7 +41,7 @@ On macOS, read `Ctrl` as `⌘`.
 
 ```bash
 yarn install
-yarn start
+yarn dev        # same as `yarn start` — runs the app with electron
 ```
 
 The app lives in the system tray. It opens an annotation window automatically when a new screenshot lands in your `Pictures/Screenshots` folder, and the tray menu can also open a file or paste from the clipboard.
@@ -49,8 +49,8 @@ The app lives in the system tray. It opens an annotation window automatically wh
 ### Packaging
 
 ```bash
-yarn dist      # every target for the host OS, written to dist/
-yarn pack:dir  # unpacked app only, for a quick look
+yarn build   # every target for the host OS, written to dist/
+yarn pack    # unpacked app only, for a quick look
 ```
 
 Windows and macOS builds have to run on their own OS. The icons the installers
@@ -67,6 +67,55 @@ Artifact names are pinned (`escribo-<version>-<os>-<arch>.<ext>`, and
 the website resolves a download to a release asset by matching the end of its
 filename. Renaming a target here means editing the matching `suffix` in
 `_data/downloads.yml` in [rathboma/escribo-web](https://github.com/rathboma/escribo-web).
+
+## Releasing
+
+Cutting a release is one command:
+
+```bash
+yarn release   # bin/make-release.sh: bumps package.json and pushes a v* tag
+```
+
+Pushing the tag drives the CI pipeline (`.github/workflows/`):
+
+1. **`publish.yml`** builds every platform (Linux x64/arm64, Windows, macOS
+   universal) and attaches the installers to a **draft** GitHub release.
+   Signing is wired but optional — builds succeed unsigned until the signing
+   secrets are added (see the step comments in `publish.yml`).
+2. Publishing that draft (a manual click in the GitHub UI) fires
+   **`release-published.yml`**, which:
+   - mirrors every asset to the R2 bucket under `releases/<tag>/` and refreshes
+     `latest.json` — the manifest the website resolves downloads from, served at
+     `download.escriboapp.com`;
+   - publishes the GPG-signed `.deb`/`.rpm` packages to the apt/dnf repos under
+     the `deb/` and `rpm/` prefixes of the same bucket, served at
+     `repo.escriboapp.com`, and uploads the public key to `escribo.key`.
+
+`build.yml` builds the Linux app and runs the tests on every PR and every push
+to `master`, purely as a check — it publishes nothing.
+
+### Auto-update
+
+The app updates itself where the OS/package manager can't: Windows, macOS and
+the Linux **AppImage** update in-app via `electron-updater` (`updater.js`),
+reading the metadata `publish.yml` attaches to each GitHub release. **deb/rpm**
+installs update through `apt`/`dnf`: the `build/deb-postinstall` and
+`build/rpm-postinstall` scripts register the `repo.escriboapp.com` repo and its
+signing key at install time. macOS updates only apply once the app is signed.
+
+### Deploy secrets
+
+`release-published.yml` needs:
+
+- Four R2 (S3-compatible) bucket secrets: `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`,
+  `ENDPOINT_URL`, `BUCKET_NAME`.
+- `GPG_PRIVATE_KEY` — the armoured, passphrase-less private key that signs the
+  apt/dnf repos. Its public half is committed at `build/escribo.key` and baked
+  into the deb/rpm postinstall scripts, so **the signing key must be in place
+  before the first stable release** — the repo publish refuses to ship an
+  unsigned repo, because installed packages pin `signed-by` / `gpgcheck=1`.
+
+Optional code-signing secrets (mac/win) are documented inline in `publish.yml`.
 
 ## Contributing
 
