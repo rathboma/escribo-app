@@ -1,0 +1,59 @@
+[package]
+name = "escribo"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.95"
+description = "Annotate screenshots with arrows, boxes, highlights and text."
+authors = ["Matthew Rathbone <matthew.rathbone@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/rathboma/escribo-app"
+homepage = "https://escriboapp.com"
+publish = false
+
+# gpui-ce is pinned to one commit: its API moves between commits, and the
+# release build should be reproducible. Bump the three `rev`s together.
+[dependencies]
+gpui = { package = "gpui-ce", git = "https://github.com/gpui-ce/gpui-ce", rev = "d52f747a7c4dd15fc0398047a491b7e5a49e578b", default-features = false, features = ["wayland", "x11"] }
+gpui_platform = { package = "gpui_ce_platform", git = "https://github.com/gpui-ce/gpui-ce", rev = "d52f747a7c4dd15fc0398047a491b7e5a49e578b", features = ["wayland", "x11"] }
+gpui_ce_elements = { git = "https://github.com/gpui-ce/gpui-ce", rev = "d52f747a7c4dd15fc0398047a491b7e5a49e578b" }
+
+# Versions below match what gpui-ce already links, so they add no second copy.
+anyhow = "1"
+dirs = "5"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
+log = "0.4"
+lyon = "1"
+parley = { version = "0.11", default-features = false, features = ["std", "system"] }
+png = "0.18"
+resvg = { version = "0.48", default-features = false, features = ["text", "system-fonts"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+smol = "2"
+swash = "0.2"
+unicode-segmentation = "1"
+tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd", "png-format"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# gpui-ce's Linux clipboard only writes text; arboard carries images.
+arboard = { version = "3", default-features = false, features = ["image-data", "wayland-data-control"] }
+ksni = { version = "0.3", default-features = false, features = ["async-io"] }
+notify = { version = "8", default-features = false }
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+# Day-to-day builds: dependencies optimised once, the app itself compiled
+# quickly — gpui is unusably slow unoptimised.
+[profile.dev]
+opt-level = 1
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
