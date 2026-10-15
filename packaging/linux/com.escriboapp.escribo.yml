@@ -3,7 +3,7 @@
 # nothing is compiled inside the sandbox.
 app-id: com.escriboapp.escribo
 runtime: org.freedesktop.Platform
-runtime-version: '24.08'
+runtime-version: '26.08'
 sdk: org.freedesktop.Sdk
 command: escribo
 finish-args:
@@ -21,6 +21,8 @@ modules:
     buildsystem: simple
     build-commands:
       - cp -a usr/. /app/
+      # Flatpak refuses to export icons larger than 512px.
+      - rm -rf /app/share/icons/hicolor/1024x1024
     sources:
       - type: dir
         path: stage

@@ -65,13 +65,16 @@ if want deb; then
   rm -rf "$pkg" && mkdir -p "$pkg/DEBIAN"
   cp -a "$STAGE/usr" "$pkg/"
   size_kb="$(du -sk "$pkg/usr" | cut -f1)"
+  # The newest glibc symbol the binary links against, so a build on a newer
+  # distro doesn't claim to run on an older one.
+  glibc="$(objdump -T "$BIN" 2>/dev/null | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -uV | tail -n1)"
   cat > "$pkg/DEBIAN/control" <<CONTROL
 Package: escribo
 Version: $VERSION
 Architecture: $DEB_ARCH
 Maintainer: Matthew Rathbone <matthew.rathbone@gmail.com>
 Installed-Size: $size_kb
-Depends: libc6 (>= 2.35), libgcc-s1, libxkbcommon0, libxkbcommon-x11-0, libxcb1, libfontconfig1, libwayland-client0, libvulkan1 | libegl1
+Depends: libc6 (>= ${glibc:-2.35}), libgcc-s1, libxkbcommon0, libxkbcommon-x11-0, libxcb1, libfontconfig1, libwayland-client0, libvulkan1 | libegl1
 Recommends: wl-clipboard, xdg-desktop-portal
 Section: graphics
 Priority: optional
