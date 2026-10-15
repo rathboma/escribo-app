@@ -7,8 +7,8 @@ use crate::text::TextEngine;
 use crate::ui::Editor;
 use anyhow::{Context as _, Result, anyhow};
 use gpui::{
-    App, AppContext as _, Bounds, ClipboardEntry, Context, Entity, Global, Size, Task, TitlebarOptions, WindowBounds,
-    WindowDecorations, WindowHandle, WindowOptions, point, px, size,
+    App, AppContext as _, Bounds, ClipboardEntry, Context, Entity, Global, Size, Task, TitlebarOptions,
+    WindowBackgroundAppearance, WindowBounds, WindowDecorations, WindowHandle, WindowOptions, point, px, size,
 };
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -105,6 +105,9 @@ pub fn open_window(source: Source, cx: &mut App) -> Option<WindowHandle<Editor>>
     };
     let handle = cx
         .open_window(options, |window, cx| {
+            // The frame's shadow and rounded corners need an alpha channel;
+            // on X11 gpui only asks for one when the background isn't opaque.
+            window.set_background_appearance(WindowBackgroundAppearance::Transparent);
             let editor = cx.new(|cx| Editor::new(window, cx));
             editor.update(cx, |editor, cx| editor.open_source(source, window, cx));
             editor

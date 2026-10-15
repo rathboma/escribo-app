@@ -27,19 +27,47 @@ Tray
 
 struct Tray {
     tx: Sender,
+    themed_icon: bool,
 }
 
+/// The tray icon as pixmaps, at the sizes panels draw it, so the host picks
+/// one rather than shrinking a large one.
 fn tray_icon() -> Vec<ksni::Icon> {
-    let Ok(img) =
-        image::load_from_memory_with_format(include_bytes!("../build/tray-icon.png"), image::ImageFormat::Png)
-    else {
-        return Vec::new();
-    };
-    let img = img.to_rgba8();
-    let (w, h) = img.dimensions();
-    // StatusNotifierItem wants ARGB32 in network byte order.
-    let data = img.pixels().flat_map(|p| [p[3], p[0], p[1], p[2]]).collect();
-    vec![ksni::Icon { width: w as i32, height: h as i32, data }]
+    let sizes: [&[u8]; 5] = [
+        include_bytes!("../build/icons/16x16.png"),
+        include_bytes!("../build/icons/32x32.png"),
+        include_bytes!("../build/icons/48x48.png"),
+        include_bytes!("../build/icons/64x64.png"),
+        include_bytes!("../build/icons/128x128.png"),
+    ];
+    sizes
+        .iter()
+        .filter_map(|png| image::load_from_memory_with_format(png, image::ImageFormat::Png).ok())
+        .map(|img| {
+            let img = img.to_rgba8();
+            let (w, h) = img.dimensions();
+            // StatusNotifierItem wants ARGB32 in network byte order.
+            let data = img.pixels().flat_map(|p| [p[3], p[0], p[1], p[2]]).collect();
+            ksni::Icon { width: w as i32, height: h as i32, data }
+        })
+        .collect()
+}
+
+/// Whether the desktop can find escribo's icon by name. Installed packages
+/// put it in the hicolor theme (a Flatpak under /app/share, which the host
+/// sees through its exports); an AppImage carries it inside the image, out
+/// of the shell's sight.
+fn themed_icon_installed() -> bool {
+    if std::env::var_os("APPIMAGE").is_some() {
+        return false;
+    }
+    let system = std::env::var("XDG_DATA_DIRS").unwrap_or_default();
+    let system = if system.is_empty() { "/usr/local/share:/usr/share".to_string() } else { system };
+    let icon = format!("icons/hicolor/256x256/apps/{}.png", crate::app::APP_ID);
+    dirs::data_dir()
+        .into_iter()
+        .chain(system.split(':').filter(|d| !d.is_empty()).map(PathBuf::from))
+        .any(|dir| dir.join(&icon).is_file())
 }
 
 impl ksni::Tray for Tray {
@@ -52,8 +80,10 @@ impl ksni::Tray for Tray {
     }
 
     fn icon_name(&self) -> String {
-        // Installed packages ship a themed icon; the pixmap covers the AppImage.
-        crate::app::APP_ID.into()
+        // A name takes precedence over the pixmap, and GNOME's AppIndicator
+        // extension shows a placeholder for a name it can't find rather than
+        // falling back, so only name an icon that is installed.
+        if self.themed_icon { crate::app::APP_ID.into() } else { String::new() }
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
@@ -98,7 +128,7 @@ pub fn start_tray(tx: Sender) {
         .name("tray".into())
         .spawn(move || {
             use ksni::TrayMethods;
-            match smol::block_on(Tray { tx }.spawn()) {
+            match smol::block_on(Tray { tx, themed_icon: themed_icon_installed() }.spawn()) {
                 Ok(handle) => {
                     // The service runs on ksni's own thread; keep it alive.
                     std::mem::forget(handle);
@@ -388,6 +418,22 @@ pub fn is_newer(candidate: &str, current: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tray_icon_comes_in_panel_sizes() {
+        let icons = tray_icon();
+        let sizes: Vec<i32> = icons.iter().map(|i| i.width).collect();
+        assert_eq!(sizes, [16, 32, 48, 64, 128]);
+        for icon in &icons {
+            assert_eq!(icon.width, icon.height);
+            assert_eq!(icon.data.len(), (icon.width * icon.height * 4) as usize);
+        }
+        // ARGB: the corner is transparent, the middle of the mark opaque.
+        let big = &icons[4];
+        assert_eq!(big.data[0], 0);
+        let mid = ((64 * 128 + 20) * 4) as usize;
+        assert_eq!(big.data[mid], 255);
+    }
 
     #[test]
     fn version_ordering() {

@@ -43,8 +43,11 @@ impl Focusable for Prompt {
 }
 
 impl Render for Prompt {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::for_settings(Shared::get(cx).settings.read(cx).settings.theme);
+        // Prompts cover the whole surface, so keep to the window inside its
+        // shadow and corners.
+        let frame = super::chrome::Frame::new(window.window_decorations());
         let hover = theme.hover;
         let last = self.actions.len().saturating_sub(1);
         let buttons = self.actions.iter().enumerate().map(|(i, action)| {
@@ -83,32 +86,35 @@ impl Render for Prompt {
             }))
             .occlude()
             .size_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .bg(theme.scrim)
             .font_family(crate::settings::UI_FONT)
+            .map(|el| frame.pad(el))
             .child(
-                div()
-                    .w(px(340.0))
-                    .p(px(18.0))
-                    .flex()
-                    .flex_col()
-                    .gap(px(14.0))
-                    .bg(theme.bg)
-                    .border_1()
-                    .border_color(theme.border)
-                    .rounded(px(12.0))
-                    .shadow(vec![gpui::BoxShadow::new(px(0.0), px(30.0), gpui::rgba(0x0000008c)).blur_radius(px(70.0))])
-                    .child(
-                        div()
-                            .text_size(px(13.5))
-                            .font_weight(FontWeight(650.0))
-                            .text_color(theme.text)
-                            .child(self.message.clone()),
-                    )
-                    .children(self.detail.clone().map(|d| div().text_size(px(12.0)).text_color(theme.muted).child(d)))
-                    .child(div().flex().flex_row_reverse().gap(px(8.0)).children(buttons.rev())),
+                frame.round(div().size_full().flex().items_center().justify_center().bg(theme.scrim)).child(
+                    div()
+                        .w(px(340.0))
+                        .p(px(18.0))
+                        .flex()
+                        .flex_col()
+                        .gap(px(14.0))
+                        .bg(theme.bg)
+                        .border_1()
+                        .border_color(theme.border)
+                        .rounded(px(12.0))
+                        .shadow(vec![
+                            gpui::BoxShadow::new(px(0.0), px(30.0), gpui::rgba(0x0000008c)).blur_radius(px(70.0)),
+                        ])
+                        .child(
+                            div()
+                                .text_size(px(13.5))
+                                .font_weight(FontWeight(650.0))
+                                .text_color(theme.text)
+                                .child(self.message.clone()),
+                        )
+                        .children(
+                            self.detail.clone().map(|d| div().text_size(px(12.0)).text_color(theme.muted).child(d)),
+                        )
+                        .child(div().flex().flex_row_reverse().gap(px(8.0)).children(buttons.rev())),
+                ),
             )
     }
 }

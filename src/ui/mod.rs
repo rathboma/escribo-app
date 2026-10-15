@@ -154,6 +154,9 @@ pub struct Editor {
     pub(crate) sliders: std::collections::HashMap<widgets::SliderId, gpui::Bounds<gpui::Pixels>>,
     pub(crate) inputs: Inputs,
     pub(crate) focused_field: Option<Field>,
+    /// The input region last handed to the compositor, so it is only sent
+    /// when it changes.
+    pub(crate) input_region: Option<Option<gpui::Bounds<gpui::Pixels>>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -189,6 +192,10 @@ impl Editor {
             let value: String = state.read(cx).as_str().chars().take(120).collect();
             this.update_settings(cx, |s| s.kit_mut().wm_text = value);
         }));
+        // The header bar dims when the window loses focus and follows the
+        // desktop's window button layout.
+        subs.push(cx.observe_window_activation(window, |_, _, cx| cx.notify()));
+        subs.push(cx.observe_button_layout_changed(window, |_, _, cx| cx.notify()));
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         let color_idx = settings.read(cx).settings.kit().default_idx;
@@ -227,6 +234,7 @@ impl Editor {
             sliders: Default::default(),
             inputs,
             focused_field: None,
+            input_region: None,
             _subscriptions: subs,
         };
         editor.sync_inputs(cx);
@@ -863,8 +871,9 @@ pub(crate) fn set_input_unless_focused(state: &Entity<EditableTextState>, value:
 impl Render for Editor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = self.theme(cx);
-        let decorations = window.window_decorations();
-        let body = div()
+        let frame = chrome::Frame::new(window.window_decorations());
+        let body = frame
+            .round(div())
             .id("app")
             .key_context("Editor")
             .track_focus(&self.focus)
@@ -897,7 +906,7 @@ impl Render for Editor {
             .child(self.render_statusbar(&theme, window, cx))
             .when_some(self.prefs, |el, tab| el.child(self.render_prefs(tab, &theme, window, cx)))
             .when(self.color_picker.is_some(), |el| el.child(self.render_color_picker(&theme, window, cx)));
-        chrome::window_frame(body.into_any_element(), decorations, &theme, window, cx)
+        self.window_frame(body.into_any_element(), frame, &theme, window)
     }
 }
 

@@ -104,10 +104,8 @@ impl Editor {
             PrefsTab::Watermark => self.prefs_watermark(&s, theme, cx),
             PrefsTab::Profiles => self.prefs_profiles(&s, theme, window, cx),
         };
-        let _ = window;
-
-        div()
-            .id("prefs")
+        super::chrome::Frame::new(window.window_decorations())
+            .round(div().id("prefs"))
             .absolute()
             .inset_0()
             .flex()

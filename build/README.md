@@ -1,13 +1,13 @@
 # Packaging icons
 
 `bin/package-linux.sh` installs these as the app's themed icon, and the app
-embeds two of them:
+embeds some of them:
 
 | File | Used for | Contents |
 | --- | --- | --- |
 | `icons/*.png` | Linux packages (hicolor icon theme, AppImage, Flatpak) | 16 → 1024 px |
 | `icons/256x256.png` | the window icon, embedded in the binary | 256 px |
-| `tray-icon.png` | the tray icon, embedded in the binary | — |
+| `icons/16x16.png` … `icons/128x128.png` | the tray icon, embedded in the binary | 16 → 128 px |
 | `icon.icns` | a future macOS `.app` bundle | 16, 32, 64, 128, 256, 512, 1024 px, plus the @2x variants |
 | `icon.ico` | a future Windows `.exe` | 16, 24, 32, 48, 64, 128, 256 px |
 | `icon.png` | fallback | 1024 px |

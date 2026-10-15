@@ -1,120 +1,247 @@
 //! The window's frame and bars: the client-side window border, the title
 //! bar, the toolbar of tools and actions, and the status bar.
 
-use super::widgets::{Tip, divider, icon, icon_button, mark, switch};
+use super::widgets::{Tip, divider, icon, icon_button, switch};
 use super::{Editor, FlashTarget, Popover, any};
-use crate::assets::icon_path;
 use crate::doc::{Tool, rgb};
 use crate::settings::{self, RATIOS};
 use crate::theme::{self, Theme};
 use gpui::{
     AnyElement, App, Context, Decorations, FontWeight, InteractiveElement, IntoElement, MouseButton, ParentElement,
-    ResizeEdge, ResizeRegion, StatefulInteractiveElement, Styled, Window, deferred, div, point,
-    prelude::FluentBuilder as _, px, svg,
+    ResizeRegion, StatefulInteractiveElement, Styled, Tiling, Window, WindowButton, WindowButtonLayout, deferred, div,
+    point, prelude::FluentBuilder, px,
 };
 
-const SHADOW: f32 = 10.0;
-const RADIUS: f32 = 10.0;
+/// How far the shadow of a client-decorated window reaches: libadwaita's
+/// `0 0 14px 5px` shadow has faded out by here.
+const SHADOW: f32 = 20.0;
+/// Resize handles reach this far out from the window's edge, as GTK's do.
+/// Clicks further out in the shadow fall through to whatever is behind.
+const RESIZE: f32 = 12.0;
+/// libadwaita's window corner radius.
+const RADIUS: f32 = 15.0;
 
-/// Client-side decorations on Linux: a soft shadow, rounded corners and
-/// resize edges around the app, all dropped when the window is tiled or
-/// maximised, or when the compositor draws the frame itself.
-pub(super) fn window_frame(
-    body: AnyElement,
-    decorations: Decorations,
-    theme: &Theme,
-    window: &mut Window,
-    cx: &mut App,
-) -> AnyElement {
-    let Decorations::Client { tiling } = decorations else {
-        window.set_client_inset(px(0.0));
-        return div().size_full().child(body).into_any_element();
-    };
-    let _ = cx;
-    let inset = if tiling.is_tiled() { px(0.0) } else { px(SHADOW) };
-    window.set_client_inset(inset);
-    let region = ResizeRegion::new(px(SHADOW)).corner_size(px(SHADOW)).without_tiled_edges(tiling);
-    let resizable = window.is_resizable();
-    let border = theme.border;
-    div()
-        .id("window-frame")
-        .size_full()
-        .bg(gpui::transparent_black())
-        .cursor_with(
-            move |pos, bounds| if resizable { region.hit_test(pos, bounds).map(gpui::CursorStyle::from) } else { None },
-        )
-        .when(!tiling.top, |d| d.pt(inset))
-        .when(!tiling.bottom, |d| d.pb(inset))
-        .when(!tiling.left, |d| d.pl(inset))
-        .when(!tiling.right, |d| d.pr(inset))
-        .on_mouse_down(MouseButton::Left, move |e, window, _| {
-            let b = gpui::Bounds::new(point(px(0.0), px(0.0)), window.viewport_size());
-            if let Some(edge) = region.hit_test(e.position, b) {
-                if window.is_resizable() {
-                    window.start_window_resize(edge);
-                }
-            }
-        })
-        .child(
-            div()
-                .size_full()
-                .overflow_hidden()
-                .when(!(tiling.top || tiling.left), |d| d.rounded_tl(px(RADIUS)))
-                .when(!(tiling.top || tiling.right), |d| d.rounded_tr(px(RADIUS)))
-                .when(!(tiling.bottom || tiling.left), |d| d.rounded_bl(px(RADIUS)))
-                .when(!(tiling.bottom || tiling.right), |d| d.rounded_br(px(RADIUS)))
-                .when(!tiling.is_tiled(), |d| {
-                    d.border_1().border_color(border).shadow(vec![
-                        gpui::BoxShadow::new(px(0.0), px(2.0), gpui::rgba(0x00000066)).blur_radius(px(SHADOW / 1.5)),
-                    ])
-                })
-                .on_mouse_move(|_, _, cx| cx.stop_propagation())
-                .child(body),
-        )
-        .into_any_element()
+/// libadwaita's header bar: 47px tall, padded 6px 7px 7px, with 6px between
+/// the buttons at either end and the window controls.
+const HEADER_H: f32 = 47.0;
+const HEADER_PAD: f32 = 7.0;
+const HEADER_GAP: f32 = 6.0;
+/// A header bar button, and a window control's click target around its
+/// 24px circle.
+const BUTTON: f32 = 34.0;
+const CONTROL_GAP: f32 = 3.0;
+
+/// The window's decoration this frame. With client-side decorations
+/// escribo draws GNOME's frame itself — a shadow, rounded corners and resize
+/// handles — dropping each where the window meets a screen edge.
+#[derive(Clone, Copy)]
+pub(super) struct Frame {
+    /// None when the compositor draws the frame.
+    tiling: Option<Tiling>,
 }
 
-#[allow(dead_code)]
-fn _edge(_: ResizeEdge) {}
+impl Frame {
+    pub(super) fn new(decorations: Decorations) -> Self {
+        match decorations {
+            Decorations::Client { tiling } => Self { tiling: Some(tiling) },
+            Decorations::Server => Self { tiling: None },
+        }
+    }
 
-impl Editor {
-    pub(super) fn render_titlebar(&mut self, theme: &Theme, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let csd = matches!(window.window_decorations(), Decorations::Client { .. });
-        let (name, dims) = match &self.doc {
-            Some(d) => (d.name.clone(), format!("{} × {}", d.shot.width, d.shot.height)),
-            None => ("No image".to_string(), String::new()),
-        };
-        let hover = theme.hover;
-        let win_btn = |id: &'static str, icon_name: &'static str, close: bool, theme: &Theme| {
-            let (surface, muted, text) = (theme.surface, theme.muted, theme.text);
-            let close_hover = theme.close_hover;
+    /// Insets an element filling the surface to the window inside the
+    /// shadow, for overlays drawn outside the frame, like prompts.
+    pub(super) fn pad<E: Styled + FluentBuilder>(&self, el: E) -> E {
+        let Some(t) = self.tiling else { return el };
+        let inset = px(SHADOW);
+        el.when(!t.top, |d| d.pt(inset))
+            .when(!t.bottom, |d| d.pb(inset))
+            .when(!t.left, |d| d.pl(inset))
+            .when(!t.right, |d| d.pr(inset))
+    }
+
+    /// Rounds an element filling the window to the window's corners, just
+    /// inside its outline. gpui doesn't clip children to rounded corners, so
+    /// anything that paints into a corner has to be rounded itself.
+    pub(super) fn round<E: Styled + FluentBuilder>(&self, el: E) -> E {
+        let Some(t) = self.tiling else { return el };
+        let r = px(RADIUS - 1.0);
+        el.when(!(t.top || t.left), |d| d.rounded_tl(r))
+            .when(!(t.top || t.right), |d| d.rounded_tr(r))
+            .when(!(t.bottom || t.left), |d| d.rounded_bl(r))
+            .when(!(t.bottom || t.right), |d| d.rounded_br(r))
+    }
+}
+
+/// A window control as libadwaita draws one: a symbolic icon on a faint
+/// circle, inside a larger click target that lights the circle on hover.
+fn window_control(button: WindowButton, maximized: bool, theme: &Theme) -> AnyElement {
+    let fg = theme.text;
+    let (id, circle, icon_name): (&'static str, &'static str, _) = match button {
+        WindowButton::Minimize => ("win-min", "win-min-circle", "win-min"),
+        WindowButton::Maximize => ("win-max", "win-max-circle", if maximized { "win-restore" } else { "win-max" }),
+        WindowButton::Close => ("win-close", "win-close-circle", "win-close"),
+    };
+    div()
+        .id(id)
+        .group(id)
+        .size(px(BUTTON))
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(
             div()
-                .id(id)
+                .id(circle)
                 .size(px(24.0))
                 .flex()
                 .items_center()
                 .justify_center()
                 .rounded_full()
-                .bg(surface)
-                .text_color(muted)
-                .cursor_pointer()
-                .hover(move |s| {
-                    if close { s.bg(close_hover).text_color(crate::theme::WHITE) } else { s.bg(hover).text_color(text) }
-                })
-                .child(svg().path(icon_path(icon_name)).size(px(9.0)))
+                .bg(theme::with_alpha(fg, 0.1))
+                .group_hover(id, move |s| s.bg(theme::with_alpha(fg, 0.15)))
+                .group_active(id, move |s| s.bg(theme::with_alpha(fg, 0.3)))
+                .child(icon(icon_name, 16.0, fg)),
+        )
+        .on_click(move |_, window, _| match button {
+            WindowButton::Minimize => window.minimize_window(),
+            WindowButton::Maximize => window.zoom_window(),
+            WindowButton::Close => window.remove_window(),
+        })
+        .into_any_element()
+}
+
+impl Editor {
+    /// Wraps the app in the window frame: with client-side decorations, the
+    /// shadow, outline and resize handles GNOME draws around its own windows.
+    pub(super) fn window_frame(
+        &mut self,
+        body: AnyElement,
+        frame: Frame,
+        theme: &Theme,
+        window: &mut Window,
+    ) -> AnyElement {
+        let Some(tiling) = frame.tiling else {
+            window.set_client_inset(px(0.0));
+            self.set_input_region(None, window);
+            return div().size_full().child(body).into_any_element();
         };
+        window.set_client_inset(px(SHADOW));
+
+        // Input stops a resize handle's width outside the window; the rest
+        // of the shadow lets clicks through.
+        let size = window.viewport_size();
+        let edge = |tiled: bool| if tiled { 0.0 } else { SHADOW - RESIZE };
+        let (l, t, r, b) = (edge(tiling.left), edge(tiling.top), edge(tiling.right), edge(tiling.bottom));
+        let region =
+            gpui::Bounds::new(point(px(l), px(t)), gpui::size(size.width - px(l + r), size.height - px(t + b)));
+        self.set_input_region(if tiling.is_tiled() { None } else { Some(region) }, window);
+
+        let handles = ResizeRegion::new(px(SHADOW)).corner_size(px(SHADOW + RESIZE)).without_tiled_edges(tiling);
+        let resizable = window.is_resizable();
+        let active = window.is_window_active();
+        let black = |a: f32| gpui::hsla(0.0, 0.0, 0.0, a);
+        // libadwaita's `window.csd` box-shadow, lighter when the window is in
+        // the background. gpui's blur radius is the gaussian's sigma: half
+        // the CSS value.
+        let shadows = if active {
+            vec![
+                gpui::BoxShadow::new(px(0.0), px(0.0), black(0.15)).blur_radius(px(7.0)).spread_radius(px(5.0)),
+                gpui::BoxShadow::new(px(0.0), px(0.0), black(0.10)).blur_radius(px(2.5)).spread_radius(px(2.0)),
+                gpui::BoxShadow::new(px(0.0), px(0.0), black(0.05)).spread_radius(px(1.0)),
+            ]
+        } else {
+            vec![
+                gpui::BoxShadow::new(px(0.0), px(0.0), black(0.08)).blur_radius(px(5.0)).spread_radius(px(5.0)),
+                gpui::BoxShadow::new(px(0.0), px(0.0), black(0.05)).spread_radius(px(1.0)),
+            ]
+        };
+        let outline = if theme.dark { gpui::hsla(0.0, 0.0, 1.0, 0.07) } else { gpui::hsla(0.0, 0.0, 1.0, 0.5) };
+        frame
+            .pad(div().id("window-frame").size_full())
+            .cursor_with(
+                move |pos, bounds| {
+                    if resizable { handles.hit_test(pos, bounds).map(gpui::CursorStyle::from) } else { None }
+                },
+            )
+            .on_mouse_down(MouseButton::Left, move |e, window, _| {
+                let b = gpui::Bounds::new(point(px(0.0), px(0.0)), window.viewport_size());
+                if let Some(edge) = handles.hit_test(e.position, b) {
+                    if window.is_resizable() {
+                        window.start_window_resize(edge);
+                    }
+                }
+            })
+            .child(
+                frame
+                    .round(div().size_full().relative())
+                    .when(!tiling.is_tiled(), |d| d.shadow(shadows))
+                    .on_mouse_move(|_, _, cx| cx.stop_propagation())
+                    .child(body)
+                    // The outline sits on top, inside the edge, like GTK's.
+                    .when(!tiling.is_tiled(), |d| {
+                        d.child(frame.round(div().absolute().inset_0().border_1().border_color(outline)))
+                    }),
+            )
+            .into_any_element()
+    }
+
+    fn set_input_region(&mut self, region: Option<gpui::Bounds<gpui::Pixels>>, window: &mut Window) {
+        if self.input_region != Some(region) {
+            self.input_region = Some(region);
+            window.set_input_region(region.as_ref().map(std::slice::from_ref));
+        }
+    }
+
+    /// The header bar, after libadwaita's: the title and image size centred
+    /// over the window, the window controls where the desktop's button
+    /// layout puts them, and everything dimmed while the window is in the
+    /// background.
+    pub(super) fn render_titlebar(&mut self, theme: &Theme, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let csd = matches!(window.window_decorations(), Decorations::Client { .. });
+        let layout = if csd { cx.button_layout() } else { None }.unwrap_or(WindowButtonLayout {
+            left: [None; gpui::MAX_BUTTONS_PER_SIDE],
+            right: [None; gpui::MAX_BUTTONS_PER_SIDE],
+        });
+        let (title, subtitle) = match &self.doc {
+            Some(d) => (d.name.clone(), Some(format!("{} × {}", d.shot.width, d.shot.height))),
+            None => ("No image".to_string(), None),
+        };
+        let maximized = window.is_maximized();
+        let controls = |side: &[Option<WindowButton>; gpui::MAX_BUTTONS_PER_SIDE]| {
+            side.iter().flatten().map(|&b| window_control(b, maximized, theme)).collect::<Vec<_>>()
+        };
+        let (left, right) = (controls(&layout.left), controls(&layout.right));
+        let width = |n: usize| if n == 0 { 0.0 } else { n as f32 * BUTTON + (n - 1) as f32 * CONTROL_GAP };
+        // The start holds the left-hand controls; the end the preferences
+        // button and the right-hand controls.
+        let start_w = width(left.len());
+        let end_w = BUTTON + if right.is_empty() { 0.0 } else { HEADER_GAP + width(right.len()) };
+        // The title centres on the window, kept clear of whichever end is wider.
+        let title_pad = HEADER_PAD + start_w.max(end_w) + HEADER_GAP;
+
+        let control_box = |buttons: Vec<AnyElement>| {
+            div()
+                .flex()
+                .items_center()
+                .gap(px(CONTROL_GAP))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .children(buttons)
+        };
+        let fg = theme.text;
+        let flat_hover = theme::with_alpha(fg, 0.07);
+        let flat_active = theme::with_alpha(fg, 0.16);
         div()
             .id("titlebar")
-            .h(px(38.0))
+            .relative()
+            .h(px(HEADER_H))
             .flex_none()
             .flex()
             .items_center()
-            .gap(px(10.0))
-            .pl(px(12.0))
-            .pr(px(10.0))
-            .bg(theme.bg)
+            .px(px(HEADER_PAD))
+            .pt(px(6.0))
+            .pb(px(7.0))
             .border_b_1()
             .border_color(theme.border)
+            .when(!window.is_window_active(), |d| d.opacity(0.5))
             .on_mouse_down(MouseButton::Left, |ev, window, _| {
                 if ev.click_count == 2 {
                     window.zoom_window();
@@ -123,53 +250,57 @@ impl Editor {
                 }
             })
             .on_mouse_down(MouseButton::Right, |ev, window, _| window.show_window_menu(ev.position))
-            .child(mark(16.0))
             .child(
                 div()
-                    .flex_1()
-                    .min_w(px(0.0))
+                    .absolute()
+                    .inset_0()
+                    .px(px(title_pad))
                     .flex()
-                    .items_baseline()
+                    .flex_col()
+                    .items_center()
                     .justify_center()
-                    .gap(px(8.0))
                     .child(
                         div()
-                            .text_size(px(12.5))
-                            .font_weight(FontWeight(600.0))
-                            .text_color(theme.text)
+                            .max_w_full()
+                            .text_size(px(14.5))
+                            .line_height(px(17.0))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(fg)
                             .whitespace_nowrap()
                             .overflow_hidden()
                             .text_ellipsis()
-                            .child(name),
+                            .child(title),
                     )
-                    .child(div().text_size(px(11.5)).text_color(theme.muted).whitespace_nowrap().child(dims)),
+                    .when_some(subtitle, |d, s| {
+                        d.child(
+                            div()
+                                .text_size(px(12.0))
+                                .line_height(px(15.0))
+                                .text_color(theme.muted)
+                                .whitespace_nowrap()
+                                .child(s),
+                        )
+                    }),
             )
+            .when(!left.is_empty(), |d| d.child(control_box(left)))
+            .child(div().flex_1())
             .child(
-                icon_button("prefs-open", "gear", 14.0, 24.0, theme)
+                div()
+                    .id("prefs-open")
+                    .size(px(BUTTON))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(9.0))
+                    .cursor_pointer()
+                    .hover(move |s| s.bg(flat_hover))
+                    .active(move |s| s.bg(flat_active))
+                    .child(icon("gear", 16.0, fg))
                     .tooltip_text("Preferences — Ctrl+,")
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(cx.listener(|this, _, _, cx| this.open_prefs(None, cx))),
             )
-            .when(csd, |el| {
-                el.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0))
-                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                        .child(
-                            win_btn("win-min", "win-min", false, theme)
-                                .on_click(|_, window, _| window.minimize_window()),
-                        )
-                        .child(
-                            win_btn("win-max", "win-max", false, theme).on_click(|_, window, _| window.zoom_window()),
-                        )
-                        .child(
-                            win_btn("win-close", "win-close", true, theme)
-                                .on_click(|_, window, _| window.remove_window()),
-                        ),
-                )
-            })
+            .when(!right.is_empty(), |d| d.child(div().w(px(HEADER_GAP))).child(control_box(right)))
             .into_any_element()
     }
 
@@ -411,7 +542,6 @@ impl Editor {
             .gap(px(14.0))
             .pl(px(12.0))
             .pr(px(4.0))
-            .bg(theme.bg)
             .border_t_1()
             .border_color(theme.border)
             .text_size(px(11.5))
