@@ -69,8 +69,8 @@ pub fn font_css(id: &str) -> String {
 }
 
 /* ==========================================================================
-   Advanced
-   ========================================================================== */
+Advanced
+========================================================================== */
 
 /// Knobs that were fixed magic numbers baked into the render. Part of the
 /// profile, so a team can share a house style including these.
@@ -131,13 +131,76 @@ pub struct AdvancedMeta {
 
 /// The order here is the order the sliders render in.
 pub const ADVANCED_META: [AdvancedMeta; 7] = [
-    AdvancedMeta { key: AdvancedKey::CornerRadius, json: "cornerRadius", label: "Corner radius", min: 0.0, max: 5.0, step: 0.1, unit: "%", hint: "Rounds the screenshot's corners when there's padding." },
-    AdvancedMeta { key: AdvancedKey::ShadowBlur, json: "shadowBlur", label: "Shadow blur", min: 0.0, max: 80.0, step: 1.0, unit: "px", hint: "Softness of the drop shadow behind the screenshot." },
-    AdvancedMeta { key: AdvancedKey::ShadowOffsetY, json: "shadowOffsetY", label: "Shadow offset", min: 0.0, max: 40.0, step: 1.0, unit: "px", hint: "How far the drop shadow falls below the screenshot." },
-    AdvancedMeta { key: AdvancedKey::ShadowOpacity, json: "shadowOpacity", label: "Shadow opacity", min: 0.0, max: 100.0, step: 1.0, unit: "%", hint: "Darkness of the drop shadow." },
-    AdvancedMeta { key: AdvancedKey::AnnotationScale, json: "annotationScale", label: "Annotation size", min: 50.0, max: 200.0, step: 5.0, unit: "%", hint: "Size of new arrows, boxes, labels and emoji." },
-    AdvancedMeta { key: AdvancedKey::BoxRadius, json: "boxRadius", label: "Box corner radius", min: 0.0, max: 20.0, step: 1.0, unit: "px", hint: "Corner rounding for the box and highlighter tools." },
-    AdvancedMeta { key: AdvancedKey::HighlightOpacity, json: "highlightOpacity", label: "Highlighter opacity", min: 10.0, max: 90.0, step: 1.0, unit: "%", hint: "Fill opacity of the highlighter tool." },
+    AdvancedMeta {
+        key: AdvancedKey::CornerRadius,
+        json: "cornerRadius",
+        label: "Corner radius",
+        min: 0.0,
+        max: 5.0,
+        step: 0.1,
+        unit: "%",
+        hint: "Rounds the screenshot's corners when there's padding.",
+    },
+    AdvancedMeta {
+        key: AdvancedKey::ShadowBlur,
+        json: "shadowBlur",
+        label: "Shadow blur",
+        min: 0.0,
+        max: 80.0,
+        step: 1.0,
+        unit: "px",
+        hint: "Softness of the drop shadow behind the screenshot.",
+    },
+    AdvancedMeta {
+        key: AdvancedKey::ShadowOffsetY,
+        json: "shadowOffsetY",
+        label: "Shadow offset",
+        min: 0.0,
+        max: 40.0,
+        step: 1.0,
+        unit: "px",
+        hint: "How far the drop shadow falls below the screenshot.",
+    },
+    AdvancedMeta {
+        key: AdvancedKey::ShadowOpacity,
+        json: "shadowOpacity",
+        label: "Shadow opacity",
+        min: 0.0,
+        max: 100.0,
+        step: 1.0,
+        unit: "%",
+        hint: "Darkness of the drop shadow.",
+    },
+    AdvancedMeta {
+        key: AdvancedKey::AnnotationScale,
+        json: "annotationScale",
+        label: "Annotation size",
+        min: 50.0,
+        max: 200.0,
+        step: 5.0,
+        unit: "%",
+        hint: "Size of new arrows, boxes, labels and emoji.",
+    },
+    AdvancedMeta {
+        key: AdvancedKey::BoxRadius,
+        json: "boxRadius",
+        label: "Box corner radius",
+        min: 0.0,
+        max: 20.0,
+        step: 1.0,
+        unit: "px",
+        hint: "Corner rounding for the box and highlighter tools.",
+    },
+    AdvancedMeta {
+        key: AdvancedKey::HighlightOpacity,
+        json: "highlightOpacity",
+        label: "Highlighter opacity",
+        min: 10.0,
+        max: 90.0,
+        step: 1.0,
+        unit: "%",
+        hint: "Fill opacity of the highlighter tool.",
+    },
 ];
 
 impl Advanced {
@@ -188,8 +251,8 @@ pub fn format_advanced(value: f64, unit: &str) -> String {
 }
 
 /* ==========================================================================
-   Presets — a screenshot style
-   ========================================================================== */
+Presets — a screenshot style
+========================================================================== */
 
 /// The style fields a preset may set. Every field but `out_w` is optional
 /// because an imported preset may leave any of them out; `out_w` is always
@@ -266,11 +329,7 @@ impl Preset {
         Some(Self {
             id: valid_id(o.get("id")).unwrap_or_else(|| new_id("p")),
             name: clean_name(name, "Untitled"),
-            created_at: o
-                .get("createdAt")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .unwrap_or_else(now_iso),
+            created_at: o.get("createdAt").and_then(Value::as_str).map(str::to_string).unwrap_or_else(now_iso),
             updated_at: o.get("updatedAt").and_then(Value::as_str).map(str::to_string),
             values: StyleValues::sanitize(Some(values)),
         })
@@ -278,8 +337,8 @@ impl Preset {
 }
 
 /* ==========================================================================
-   Profiles — the global kit
-   ========================================================================== */
+Profiles — the global kit
+========================================================================== */
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Gradient {
@@ -316,19 +375,12 @@ pub struct Kit {
 impl Default for Kit {
     fn default() -> Self {
         Self {
-            palette: ["#FF007F", "#FF3B30", "#FFB300", "#12B76A", "#2E7DFF", "#15151A"]
-                .map(String::from)
-                .to_vec(),
+            palette: ["#FF007F", "#FF3B30", "#FFB300", "#12B76A", "#2E7DFF", "#15151A"].map(String::from).to_vec(),
             default_idx: 0,
             solid_bg: ["#101014", "#EFE7DC", "#3A4354", "#F7D6E4"].map(String::from).to_vec(),
-            grad_bg: [
-                ("#2B3242", "#12151D"),
-                ("#FFD9E8", "#FF9CC6"),
-                ("#C6E2FF", "#7FAEFF"),
-                ("#D9F5E8", "#8AD6B8"),
-            ]
-            .map(|(a, b)| Gradient { a: a.into(), b: b.into() })
-            .to_vec(),
+            grad_bg: [("#2B3242", "#12151D"), ("#FFD9E8", "#FF9CC6"), ("#C6E2FF", "#7FAEFF"), ("#D9F5E8", "#8AD6B8")]
+                .map(|(a, b)| Gradient { a: a.into(), b: b.into() })
+                .to_vec(),
             font: "system".into(),
             wm_mode: WmMode::Default,
             wm_text: String::new(),
@@ -383,23 +435,14 @@ impl Kit {
             } else {
                 WmMode::Default
             },
-            wm_text: src
-                .get("wmText")
-                .and_then(Value::as_str)
-                .map(|t| truncate_chars(t, 120))
-                .unwrap_or(d.wm_text),
+            wm_text: src.get("wmText").and_then(Value::as_str).map(|t| truncate_chars(t, 120)).unwrap_or(d.wm_text),
             wm_color: src
                 .get("wmColor")
                 .and_then(Value::as_str)
                 .filter(|s| is_hex(s))
                 .map(str::to_string)
                 .unwrap_or(d.wm_color),
-            wm_bg: src
-                .get("wmBg")
-                .and_then(Value::as_str)
-                .filter(|s| is_hex(s))
-                .map(str::to_string)
-                .unwrap_or(d.wm_bg),
+            wm_bg: src.get("wmBg").and_then(Value::as_str).filter(|s| is_hex(s)).map(str::to_string).unwrap_or(d.wm_bg),
             advanced: Advanced::sanitize(src.get("advanced")),
         }
     }
@@ -436,11 +479,7 @@ impl Profile {
         Some(Self {
             id: valid_id(o.get("id")).unwrap_or_else(|| new_id("prof")),
             name: clean_name(name, "Untitled"),
-            created_at: o
-                .get("createdAt")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .unwrap_or_else(now_iso),
+            created_at: o.get("createdAt").and_then(Value::as_str).map(str::to_string).unwrap_or_else(now_iso),
             updated_at: o.get("updatedAt").and_then(Value::as_str).map(str::to_string),
             kit: Kit::sanitize(Some(o)),
             presets: sanitize_presets(o.get("presets")),
@@ -449,14 +488,12 @@ impl Profile {
 }
 
 fn sanitize_presets(v: Option<&Value>) -> Vec<Preset> {
-    v.and_then(Value::as_array)
-        .map(|arr| arr.iter().filter_map(Preset::sanitize).collect())
-        .unwrap_or_default()
+    v.and_then(Value::as_array).map(|arr| arr.iter().filter_map(Preset::sanitize).collect()).unwrap_or_default()
 }
 
 /* ==========================================================================
-   Settings
-   ========================================================================== */
+Settings
+========================================================================== */
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -484,14 +521,7 @@ pub struct Style {
 
 impl Default for Style {
     fn default() -> Self {
-        Self {
-            watermark: true,
-            backdrop: 0,
-            pad: 0,
-            ratio: "orig".into(),
-            out_scale: 1.0,
-            out_w: None,
-        }
+        Self { watermark: true, backdrop: 0, pad: 0, ratio: "orig".into(), out_scale: 1.0, out_w: None }
     }
 }
 
@@ -579,11 +609,7 @@ impl Settings {
         };
 
         Self {
-            theme: if o.get("theme").and_then(Value::as_str) == Some("light") {
-                Theme::Light
-            } else {
-                Theme::Dark
-            },
+            theme: if o.get("theme").and_then(Value::as_str) == Some("light") { Theme::Light } else { Theme::Dark },
             style,
             profiles,
             active_profile,
@@ -592,10 +618,7 @@ impl Settings {
     }
 
     pub fn profile(&self) -> &Profile {
-        self.profiles
-            .iter()
-            .find(|p| p.id == self.active_profile)
-            .unwrap_or(&self.profiles[0])
+        self.profiles.iter().find(|p| p.id == self.active_profile).unwrap_or(&self.profiles[0])
     }
 
     pub fn profile_mut(&mut self) -> &mut Profile {
@@ -692,10 +715,7 @@ impl Settings {
             Some(src) => Profile::new(
                 name,
                 src.kit.clone(),
-                src.presets
-                    .iter()
-                    .map(|p| Preset { id: new_id("p"), ..p.clone() })
-                    .collect(),
+                src.presets.iter().map(|p| Preset { id: new_id("p"), ..p.clone() }).collect(),
             ),
             None => Profile::new(name, Kit::default(), Vec::new()),
         };
@@ -888,8 +908,8 @@ impl ImportOutcome {
 }
 
 /* ==========================================================================
-   Helpers
-   ========================================================================== */
+Helpers
+========================================================================== */
 
 pub fn plural(n: usize) -> &'static str {
     if n == 1 { "" } else { "s" }
@@ -928,8 +948,7 @@ pub fn is_hex(v: &str) -> bool {
 
 fn valid_id(v: Option<&Value>) -> Option<String> {
     let s = v?.as_str()?;
-    let ok = (1..=40).contains(&s.len())
-        && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    let ok = (1..=40).contains(&s.len()) && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
     ok.then(|| s.to_string())
 }
 
@@ -970,10 +989,8 @@ pub fn slug(text: &str) -> String {
 pub fn new_id(prefix: &str) -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let millis = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
+    let millis =
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
     // A cheap mix of the clock, the process and a counter stands in for the
     // old Math.random() suffix: unique within a run and across machines.
     let mut x = millis
@@ -1001,9 +1018,7 @@ fn base36(mut n: u64) -> String {
 
 /// `new Date().toISOString()`.
 pub fn now_iso() -> String {
-    let d = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
+    let d = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
     let secs = d.as_secs() as i64;
     let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
     // Civil-from-days (Howard Hinnant's algorithm).

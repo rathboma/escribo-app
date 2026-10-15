@@ -1,0 +1,26 @@
+# Flatpak manifest. bin/package-linux.sh fills in the staged files: the
+# release binary and the desktop/icon/metainfo files are copied in as built,
+# nothing is compiled inside the sandbox.
+app-id: com.escriboapp.escribo
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: escribo
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # The Screenshots folder is watched for new shots.
+  - --filesystem=xdg-pictures
+  # The tray icon (StatusNotifierItem) and update notices.
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.freedesktop.Notifications
+modules:
+  - name: escribo
+    buildsystem: simple
+    build-commands:
+      - cp -a usr/. /app/
+    sources:
+      - type: dir
+        path: stage

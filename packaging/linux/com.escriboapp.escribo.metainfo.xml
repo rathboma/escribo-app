@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.escriboapp.escribo</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>escribo</name>
+  <summary>Annotate screenshots with arrows, boxes, highlights and text</summary>
+  <description>
+    <p>
+      escribo is a lightweight annotation tool for screenshots. Add arrows,
+      boxes, a highlighter, text labels and emoji; scramble anything that
+      should not be readable; crop, pad and frame the shot; then copy it or
+      save it.
+    </p>
+    <p>
+      It stays in the tray and opens a window by itself when a new screenshot
+      lands in Pictures/Screenshots. Everything runs locally.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.escriboapp.escribo.desktop</launchable>
+  <url type="homepage">https://escriboapp.com</url>
+  <url type="bugtracker">https://github.com/rathboma/escribo-app/issues</url>
+  <developer id="com.escriboapp">
+    <name>Rathbone Labs LLC</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <provides>
+    <binary>escribo</binary>
+  </provides>
+</component>

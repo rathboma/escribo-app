@@ -7,9 +7,9 @@ use crate::assets::icon_path;
 use crate::settings::{ADVANCED_META, AdvancedKey, PAD_MAX};
 use crate::theme::Theme;
 use gpui::{
-    AppContext as _, AnyElement, Bounds, Context, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, PaintQuad, ParentElement, Pixels, Point, SharedString, StatefulInteractiveElement, Stateful,
-    Styled, Svg, canvas, div, point, prelude::FluentBuilder as _, px, size, svg,
+    AnyElement, AppContext as _, Bounds, Context, Div, ElementId, FontWeight, Hsla, InteractiveElement, IntoElement,
+    MouseButton, MouseDownEvent, PaintQuad, ParentElement, Pixels, Point, SharedString, Stateful,
+    StatefulInteractiveElement, Styled, Svg, canvas, div, point, prelude::FluentBuilder as _, px, size, svg,
 };
 use gpui_ce_elements::editable_text::{EditableTextState, text_input};
 
@@ -133,17 +133,15 @@ pub fn icon_button(id: impl Into<ElementId>, name: &str, s: f32, box_size: f32, 
 
 /// A row of mutually exclusive choices.
 pub fn segmented(theme: &Theme) -> Div {
-    div()
-        .flex()
-        .gap(px(2.0))
-        .p(px(3.0))
-        .bg(theme.sunken)
-        .border_1()
-        .border_color(theme.border)
-        .rounded(px(8.0))
+    div().flex().gap(px(2.0)).p(px(3.0)).bg(theme.sunken).border_1().border_color(theme.border).rounded(px(8.0))
 }
 
-pub fn seg_button(id: impl Into<ElementId>, text: impl Into<SharedString>, pressed: bool, theme: &Theme) -> Stateful<Div> {
+pub fn seg_button(
+    id: impl Into<ElementId>,
+    text: impl Into<SharedString>,
+    pressed: bool,
+    theme: &Theme,
+) -> Stateful<Div> {
     let (hover, txt) = (theme.hover, theme.text);
     div()
         .id(id)
@@ -241,8 +239,8 @@ pub fn mark(s: f32) -> Div {
 }
 
 /* ==========================================================================
-   Sliders
-   ========================================================================== */
+Sliders
+========================================================================== */
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SliderId {
@@ -287,7 +285,8 @@ impl Editor {
                         let t = Bounds::new(point(b.origin.x, cy - px(2.0)), size(b.size.width, px(4.0)));
                         window.paint_quad(PaintQuad::new(t).corner_radii(px(2.0)).background(track));
                         let x = b.origin.x + px(THUMB / 2.0) + (b.size.width - px(THUMB)) * frac;
-                        let tb = Bounds::new(point(x - px(THUMB / 2.0), cy - px(THUMB / 2.0)), size(px(THUMB), px(THUMB)));
+                        let tb =
+                            Bounds::new(point(x - px(THUMB / 2.0), cy - px(THUMB / 2.0)), size(px(THUMB), px(THUMB)));
                         window.paint_drop_shadows(
                             tb,
                             px(THUMB / 2.0).into(),
@@ -305,7 +304,8 @@ impl Editor {
     /// Sets a slider's value from the pointer's x.
     pub(crate) fn slider_to(&mut self, id: SliderId, pos: Point<Pixels>, cx: &mut Context<Self>) {
         let Some(b) = self.sliders.get(&id).copied() else { return };
-        let fx = ((f32::from(pos.x - b.origin.x) - THUMB / 2.0) / (f32::from(b.size.width) - THUMB).max(1.0)).clamp(0.0, 1.0);
+        let fx = ((f32::from(pos.x - b.origin.x) - THUMB / 2.0) / (f32::from(b.size.width) - THUMB).max(1.0))
+            .clamp(0.0, 1.0);
         let fy = (f32::from(pos.y - b.origin.y) / f32::from(b.size.height).max(1.0)).clamp(0.0, 1.0);
         match id {
             SliderId::Pad | SliderId::PadPrefs => {

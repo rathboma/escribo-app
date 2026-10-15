@@ -40,7 +40,9 @@ pub(super) fn window_frame(
         .id("window-frame")
         .size_full()
         .bg(gpui::transparent_black())
-        .cursor_with(move |pos, bounds| if resizable { region.hit_test(pos, bounds).map(gpui::CursorStyle::from) } else { None })
+        .cursor_with(
+            move |pos, bounds| if resizable { region.hit_test(pos, bounds).map(gpui::CursorStyle::from) } else { None },
+        )
         .when(!tiling.top, |d| d.pt(inset))
         .when(!tiling.bottom, |d| d.pb(inset))
         .when(!tiling.left, |d| d.pl(inset))
@@ -96,7 +98,9 @@ impl Editor {
                 .bg(surface)
                 .text_color(muted)
                 .cursor_pointer()
-                .hover(move |s| if close { s.bg(close_hover).text_color(crate::theme::WHITE) } else { s.bg(hover).text_color(text) })
+                .hover(move |s| {
+                    if close { s.bg(close_hover).text_color(crate::theme::WHITE) } else { s.bg(hover).text_color(text) }
+                })
                 .child(svg().path(icon_path(icon_name)).size(px(9.0)))
         };
         div()
@@ -153,9 +157,17 @@ impl Editor {
                         .items_center()
                         .gap(px(6.0))
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                        .child(win_btn("win-min", "win-min", false, theme).on_click(|_, window, _| window.minimize_window()))
-                        .child(win_btn("win-max", "win-max", false, theme).on_click(|_, window, _| window.zoom_window()))
-                        .child(win_btn("win-close", "win-close", true, theme).on_click(|_, window, _| window.remove_window())),
+                        .child(
+                            win_btn("win-min", "win-min", false, theme)
+                                .on_click(|_, window, _| window.minimize_window()),
+                        )
+                        .child(
+                            win_btn("win-max", "win-max", false, theme).on_click(|_, window, _| window.zoom_window()),
+                        )
+                        .child(
+                            win_btn("win-close", "win-close", true, theme)
+                                .on_click(|_, window, _| window.remove_window()),
+                        ),
                 )
             })
             .into_any_element()
@@ -271,8 +283,14 @@ impl Editor {
             .child(divider(theme, 24.0))
             .child(div().flex().flex_none().items_center().gap(px(5.0)).children(swatches))
             .child(divider(theme, 24.0))
-            .child(history_btn("undo", "undo", can_undo, "Undo — Ctrl+Z").on_click(cx.listener(|this, _, _, cx| this.undo(cx))))
-            .child(history_btn("redo", "redo", can_redo, "Redo — Ctrl+Shift+Z").on_click(cx.listener(|this, _, _, cx| this.redo(cx))))
+            .child(
+                history_btn("undo", "undo", can_undo, "Undo — Ctrl+Z")
+                    .on_click(cx.listener(|this, _, _, cx| this.undo(cx))),
+            )
+            .child(
+                history_btn("redo", "redo", can_redo, "Redo — Ctrl+Shift+Z")
+                    .on_click(cx.listener(|this, _, _, cx| this.redo(cx))),
+            )
             .child(div().flex_1().min_w(px(8.0)))
             .child(
                 div()
@@ -344,7 +362,12 @@ impl Editor {
             .into_any_element()
     }
 
-    pub(super) fn render_statusbar(&mut self, theme: &Theme, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_statusbar(
+        &mut self,
+        theme: &Theme,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let s = self.s(cx).clone();
         let (hover, text, muted) = (theme.hover, theme.text, theme.muted);
         let status_btn = move |id: &'static str, on: bool, open: bool| {
@@ -393,11 +416,14 @@ impl Editor {
             .border_color(theme.border)
             .text_size(px(11.5))
             .text_color(theme.muted)
-            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
-                if this.focused_field.is_none() {
-                    window.focus(&this.focus, cx);
-                }
-            }))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, window, cx| {
+                    if this.focused_field.is_none() {
+                        window.focus(&this.focus, cx);
+                    }
+                }),
+            )
             .child(
                 div()
                     .relative()
@@ -437,7 +463,9 @@ impl Editor {
                             .child(ratio.label)
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_popover(Popover::Ratio, cx))),
                     )
-                    .when(open == Some(Popover::Ratio), |el| el.child(deferred(self.render_ratio_pop(theme, cx)).priority(1usize))),
+                    .when(open == Some(Popover::Ratio), |el| {
+                        el.child(deferred(self.render_ratio_pop(theme, cx)).priority(1usize))
+                    }),
             )
             .child(divider(theme, 16.0))
             .child(

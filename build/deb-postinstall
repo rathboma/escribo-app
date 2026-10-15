@@ -1,20 +1,12 @@
 #!/bin/bash
-# Runs after `dpkg -i escribo*.deb` (electron-builder deb afterInstall hook).
+# The deb's postinst (bin/package-linux.sh installs it as DEBIAN/postinst).
 # Registers the escribo apt repo and its signing key so that `apt update &&
 # apt upgrade` keeps escribo current. Idempotent; safe to re-run.
-#
-# Replaces electron-builder's default after-install, so the /usr/bin symlink it
-# would normally create is recreated here.
 
 set -e
 
 KEYRING=/usr/share/keyrings/escribo.asc
 SOURCES=/etc/apt/sources.list.d/escribo.list
-
-# Convenience symlink so `escribo` runs from a shell.
-if [ ! -e /usr/bin/escribo ] && [ -x /opt/escribo/escribo ]; then
-  ln -sf /opt/escribo/escribo /usr/bin/escribo
-fi
 
 # apt reads an armoured key straight from a signed-by keyring (apt >= 1.4), so
 # no gpg/apt-key is needed on the target machine.
@@ -85,5 +77,9 @@ hSWbOMCXEcBHjqLwP8sFFf971INd2BBw1FcUlnDv85k3J0e0
 ESCRIBO_KEY
 
 echo "deb [signed-by=$KEYRING] https://repo.escriboapp.com/deb stable main" > "$SOURCES"
+
+# Refresh the desktop's caches for the new launcher and icon.
+command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q /usr/share/applications || true
+command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -q -t /usr/share/icons/hicolor || true
 
 echo "escribo apt repo and signing key configured."

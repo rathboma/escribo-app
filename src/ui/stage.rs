@@ -6,18 +6,16 @@
 //! watermark are drawn by the same CPU text renderer the export uses and
 //! shown as bitmaps, so what is on screen is what lands in the PNG.
 
-use super::{Editor, AREA_PAD, ZOOM_STEP};
-use crate::doc::{
-    Annotation, Arrow, BoxShape, DragModifiers, Emoji, Handle, Id, Label, Measure, Rgb, Shape, Tool,
-};
+use super::{AREA_PAD, Editor, ZOOM_STEP};
+use crate::doc::{Annotation, Arrow, BoxShape, DragModifiers, Emoji, Handle, Id, Label, Measure, Rgb, Shape, Tool};
 use crate::geom::{Affine, El, OrientedBox, Rect, V2, v2};
 use crate::render;
 use crate::text::TextEngine;
 use crate::theme::{self, Theme};
 use gpui::{
-    Bounds, ContentMask, Context, CursorStyle, EntityInputHandler, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, PaintQuad, PathBuilder, Pixels, Point, RenderImage, ScrollDelta,
-    ScrollWheelEvent, UTF16Selection, Window, point, px, size,
+    Bounds, ContentMask, Context, CursorStyle, EntityInputHandler, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, PaintQuad, PathBuilder, Pixels, Point, RenderImage, ScrollDelta, ScrollWheelEvent, UTF16Selection,
+    Window, point, px, size,
 };
 use parley::editing::{Cursor, Selection};
 use parley::layout::Affinity;
@@ -27,8 +25,8 @@ use std::ops::Range;
 use std::sync::Arc;
 
 /* ==========================================================================
-   Geometry
-   ========================================================================== */
+Geometry
+========================================================================== */
 
 /// Where everything is on screen this frame, in window coordinates.
 #[derive(Clone, Copy, Debug)]
@@ -45,7 +43,10 @@ pub struct StageGeom {
 
 impl StageGeom {
     pub fn to_image(&self, p: Point<Pixels>) -> V2 {
-        v2((f32::from(p.x) - f32::from(self.shot.origin.x)) / self.k, (f32::from(p.y) - f32::from(self.shot.origin.y)) / self.k)
+        v2(
+            (f32::from(p.x) - f32::from(self.shot.origin.x)) / self.k,
+            (f32::from(p.y) - f32::from(self.shot.origin.y)) / self.k,
+        )
     }
 
     pub fn to_screen(&self, p: V2) -> Point<Pixels> {
@@ -68,8 +69,8 @@ fn rect_of(b: Bounds<Pixels>) -> Rect {
 }
 
 /* ==========================================================================
-   State
-   ========================================================================== */
+State
+========================================================================== */
 
 pub struct TextEdit {
     pub id: Id,
@@ -90,13 +91,39 @@ pub enum CropHandle {
 #[derive(Clone, Debug)]
 pub enum Drag {
     /// A shape being drawn; `origin` is where the drag started.
-    Draw { id: Id, origin: V2, moved: bool },
-    Move { start: V2, originals: Vec<(Id, Shape)>, moved: bool, reselect_text: Option<Id> },
-    Handle { id: Id, handle: Handle, start: Shape, frame: OrientedBox },
-    Band { start: V2, now: V2, base: Vec<Id> },
-    CropNew { start: V2 },
-    CropMove { start: V2, from: Rect },
-    CropResize { handle: CropHandle, from: Rect },
+    Draw {
+        id: Id,
+        origin: V2,
+        moved: bool,
+    },
+    Move {
+        start: V2,
+        originals: Vec<(Id, Shape)>,
+        moved: bool,
+        reselect_text: Option<Id>,
+    },
+    Handle {
+        id: Id,
+        handle: Handle,
+        start: Shape,
+        frame: OrientedBox,
+    },
+    Band {
+        start: V2,
+        now: V2,
+        base: Vec<Id>,
+    },
+    CropNew {
+        start: V2,
+    },
+    CropMove {
+        start: V2,
+        from: Rect,
+    },
+    CropResize {
+        handle: CropHandle,
+        from: Rect,
+    },
     TextSelect,
     Slider(super::widgets::SliderId),
 }
@@ -163,7 +190,10 @@ fn half(rgba: &[u8], w: u32, h: u32) -> (u32, u32, Vec<u8>) {
     for y in 0..nh {
         for x in 0..nw {
             for c in 0..4 {
-                let v = at(2 * x, 2 * y, c) + at(2 * x + 1, 2 * y, c) + at(2 * x, 2 * y + 1, c) + at(2 * x + 1, 2 * y + 1, c);
+                let v = at(2 * x, 2 * y, c)
+                    + at(2 * x + 1, 2 * y, c)
+                    + at(2 * x, 2 * y + 1, c)
+                    + at(2 * x + 1, 2 * y + 1, c);
                 out[((y * nw + x) * 4) as usize + c] = ((v + 2) / 4) as u8;
             }
         }
@@ -174,8 +204,8 @@ fn half(rgba: &[u8], w: u32, h: u32) -> (u32, u32, Vec<u8>) {
 const MAX_TEXTURE: u32 = 8192;
 
 /* ==========================================================================
-   Painting
-   ========================================================================== */
+Painting
+========================================================================== */
 
 const HANDLE: f32 = 11.0;
 const ROTATE_OFFSET: f32 = 30.0;
@@ -204,12 +234,19 @@ impl Editor {
         let k_shot_x = (layout.shot_x as f32 * k).round();
         let k_shot_y = (layout.shot_y as f32 * k).round();
         let shot = bounds(x + k_shot_x, y + k_shot_y, doc.shot.width as f32 * k, doc.shot.height as f32 * k);
-        let geom = StageGeom { area, stage: bounds(x.round(), y.round(), stage_w, stage_h), shot, k, layout, overflow: over };
+        let geom =
+            StageGeom { area, stage: bounds(x.round(), y.round(), stage_w, stage_h), shot, k, layout, overflow: over };
         self.geom = Some(geom);
         Some(geom)
     }
 
-    pub(crate) fn paint_area(&mut self, area: Bounds<Pixels>, hitbox: &gpui::Hitbox, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn paint_area(
+        &mut self,
+        area: Bounds<Pixels>,
+        hitbox: &gpui::Hitbox,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let theme = self.theme(cx);
         paint_dots(window, area, &theme);
         let Some(g) = self.compute_geom(area, cx) else {
@@ -246,7 +283,11 @@ impl Editor {
 
         self.gpu.flush(window);
 
-        let cursor = self.hover.cursor.unwrap_or(if self.tool == Tool::Select { CursorStyle::Arrow } else { CursorStyle::Crosshair });
+        let cursor = self.hover.cursor.unwrap_or(if self.tool == Tool::Select {
+            CursorStyle::Arrow
+        } else {
+            CursorStyle::Crosshair
+        });
         window.set_cursor_style(cursor, hitbox);
 
         if self.edit.is_some() {
@@ -283,7 +324,11 @@ impl Editor {
 
     fn shot_radius(&self, g: &StageGeom, cx: &Context<Self>) -> f32 {
         let s = self.s(cx);
-        if s.style.pad > 0 { f32::from(g.shot.size.width) * (s.kit().advanced.corner_radius as f32 / 100.0) } else { 0.0 }
+        if s.style.pad > 0 {
+            f32::from(g.shot.size.width) * (s.kit().advanced.corner_radius as f32 / 100.0)
+        } else {
+            0.0
+        }
     }
 
     fn paint_shot(&mut self, g: &StageGeom, dpr: f32, window: &mut Window, cx: &mut Context<Self>) {
@@ -297,21 +342,18 @@ impl Editor {
                 g.shot,
                 px(radius).into(),
                 0.0,
-                &[gpui::BoxShadow::new(px(0.0), px(a.shadow_offset_y as f32 * u), gpui::Rgba::new(
-                    0.0,
-                    0.0,
-                    0.0,
-                    a.shadow_opacity as f32 / 100.0,
-                ))
+                &[gpui::BoxShadow::new(
+                    px(0.0),
+                    px(a.shadow_offset_y as f32 * u),
+                    gpui::Rgba::new(0.0, 0.0, 0.0, a.shadow_opacity as f32 / 100.0),
+                )
                 .blur_radius(px(a.shadow_blur as f32 * u))],
             );
         }
         let shot = doc.shot.clone();
         let want = f32::from(g.shot.size.width) * dpr;
         let Some(image) = self.shot_level(&shot, want) else { return };
-        window
-            .paint_image(g.shot, g.shot, px(radius).into(), 0.0, image, 0, false)
-            .ok();
+        window.paint_image(g.shot, g.shot, px(radius).into(), 0.0, image, 0, false).ok();
     }
 
     /// The screenshot halved until the next halving would be smaller than it
@@ -321,7 +363,7 @@ impl Editor {
         if self.gpu.shot_ptr != ptr {
             self.gpu.levels.clear();
             self.gpu.stale.extend(self.gpu.gpu_levels.drain(..).flatten());
-            self.gpu.levels.push((shot.width, shot.height, Arc::new(shot.rgba.clone())));
+            self.gpu.levels.push((shot.width, shot.height, shot.rgba.clone()));
             self.gpu.gpu_levels.push(None);
             self.gpu.shot_ptr = ptr;
         }
@@ -412,14 +454,16 @@ impl Editor {
         let dev = g.affine().then(Affine::scale(dpr, dpr));
         let full = to_image.then(dev);
         let anchor = full.apply(V2::ZERO);
-        let snapped = Affine { e: full.e - anchor.x + anchor.x.round(), f: full.f - anchor.y + anchor.y.round(), ..full };
+        let snapped =
+            Affine { e: full.e - anchor.x + anchor.x.round(), f: full.f - anchor.y + anchor.y.round(), ..full };
         let aabb = Rect::bounding(&frame.corners().map(|c| dev.apply(c))).inflate(pad * g.k * dpr);
         // Only the visible part is rendered: a label at 8× zoom can be huge.
         let visible = rect_of(g.stage);
         let visible = Rect::new(visible.x * dpr, visible.y * dpr, visible.w * dpr, visible.h * dpr);
         let clip = aabb.intersect(&visible)?;
         let (x0, y0) = (clip.x.floor() as i32, clip.y.floor() as i32);
-        let (w, h) = ((clip.right().ceil() as i32 - x0).max(1) as u32, (clip.bottom().ceil() as i32 - y0).max(1) as u32);
+        let (w, h) =
+            ((clip.right().ceil() as i32 - x0).max(1) as u32, (clip.bottom().ceil() as i32 - y0).max(1) as u32);
         // The key holds everything but the whole-pixel position.
         let rel = (x0 - anchor.x.round() as i32, y0 - anchor.y.round() as i32);
         for v in [full.a, full.b, full.c, full.d] {
@@ -508,9 +552,7 @@ impl Editor {
             let f = a.shape.frame(&mut *text);
             let corners = f.corners().map(|c| g.to_screen(c));
             let c = a.shape.controls();
-            if !c.arrow_head {
-                stroke_polygon(&corners, 1.0, border, window);
-            }
+            stroke_polygon(&corners, 1.0, border, window);
             if !single {
                 continue;
             }
@@ -531,7 +573,6 @@ impl Editor {
             }
             if c.arrow_head {
                 if let Shape::Arrow(arrow) = &a.shape {
-                    stroke_polygon(&corners, 1.0, border, window);
                     let tip = arrow.head + (arrow.head - arrow.tail) * (1.0 / arrow.length().max(1.0)) * (6.0 / g.k);
                     paint_handle_circle(g.to_screen(tip), 6.0, gpui::rgb(0x2E7DFF), gpui::rgb(0xffffff), window);
                 }
@@ -555,10 +596,7 @@ impl Editor {
         if let Some(Drag::Band { start, now, .. }) = &self.drag {
             let a = g.to_screen(*start);
             let b = g.to_screen(*now);
-            let r = Bounds::from_corners(
-                point(a.x.min(b.x), a.y.min(b.y)),
-                point(a.x.max(b.x), a.y.max(b.y)),
-            );
+            let r = Bounds::from_corners(point(a.x.min(b.x), a.y.min(b.y)), point(a.x.max(b.x), a.y.max(b.y)));
             window.paint_quad(
                 PaintQuad::new(r)
                     .background(gpui::rgba(0x6496ff26))
@@ -593,14 +631,27 @@ impl Editor {
             for i in 1..3 {
                 let x = tl.x + (br.x - tl.x) * (i as f32 / 3.0);
                 let y = tl.y + (br.y - tl.y) * (i as f32 / 3.0);
-                window.paint_quad(PaintQuad::new(Bounds::new(point(x, tl.y), size(px(1.0), br.y - tl.y))).background(gpui::rgba(0xffffff40)));
-                window.paint_quad(PaintQuad::new(Bounds::new(point(tl.x, y), size(br.x - tl.x, px(1.0)))).background(gpui::rgba(0xffffff40)));
+                window.paint_quad(
+                    PaintQuad::new(Bounds::new(point(x, tl.y), size(px(1.0), br.y - tl.y)))
+                        .background(gpui::rgba(0xffffff40)),
+                );
+                window.paint_quad(
+                    PaintQuad::new(Bounds::new(point(tl.x, y), size(br.x - tl.x, px(1.0))))
+                        .background(gpui::rgba(0xffffff40)),
+                );
             }
             // Inset rather than outset: a crop covering the whole image would
             // otherwise push its handles outside the shot and clip them away.
-            for (hx, hy) in [(tl.x, tl.y), (br.x - px(12.0), tl.y), (tl.x, br.y - px(12.0)), (br.x - px(12.0), br.y - px(12.0))] {
+            for (hx, hy) in
+                [(tl.x, tl.y), (br.x - px(12.0), tl.y), (tl.x, br.y - px(12.0)), (br.x - px(12.0), br.y - px(12.0))]
+            {
                 let hb = Bounds::new(point(hx, hy), size(px(12.0), px(12.0)));
-                window.paint_drop_shadows(hb, px(2.0).into(), 0.0, &[gpui::BoxShadow::new(px(0.0), px(1.0), gpui::rgba(0x00000066)).blur_radius(px(3.0))]);
+                window.paint_drop_shadows(
+                    hb,
+                    px(2.0).into(),
+                    0.0,
+                    &[gpui::BoxShadow::new(px(0.0), px(1.0), gpui::rgba(0x00000066)).blur_radius(px(3.0))],
+                );
                 window.paint_quad(PaintQuad::new(hb).corner_radii(px(2.0)).background(gpui::rgb(0xffffff)));
             }
         });
@@ -614,20 +665,30 @@ impl Editor {
         let layout = self.text.borrow_mut().label_layout(&label);
         let t = TextEngine::label_transform(&label).then(g.affine());
         for (bb, _) in edit.selection.geometry(&layout.layout) {
-            let quad = [v2(bb.x0 as f32, bb.y0 as f32), v2(bb.x1 as f32, bb.y0 as f32), v2(bb.x1 as f32, bb.y1 as f32), v2(bb.x0 as f32, bb.y1 as f32)];
+            let quad = [
+                v2(bb.x0 as f32, bb.y0 as f32),
+                v2(bb.x1 as f32, bb.y0 as f32),
+                v2(bb.x1 as f32, bb.y1 as f32),
+                v2(bb.x0 as f32, bb.y1 as f32),
+            ];
             fill_polygon(&quad.map(|p| to_point(t.apply(p))), gpui::rgba(0x1177ff4d), window);
         }
         if edit.selection.is_collapsed() {
             let w = (2.0 / t.scale_factor()).max(0.5);
             let bb = edit.selection.focus().geometry(&layout.layout, w);
-            let quad = [v2(bb.x0 as f32, bb.y0 as f32), v2(bb.x1 as f32, bb.y0 as f32), v2(bb.x1 as f32, bb.y1 as f32), v2(bb.x0 as f32, bb.y1 as f32)];
+            let quad = [
+                v2(bb.x0 as f32, bb.y0 as f32),
+                v2(bb.x1 as f32, bb.y0 as f32),
+                v2(bb.x1 as f32, bb.y1 as f32),
+                v2(bb.x0 as f32, bb.y1 as f32),
+            ];
             fill_polygon(&quad.map(|p| to_point(t.apply(p))), theme::from_rgb(label.color), window);
         }
     }
 
     /* ======================================================================
-       Pointer
-       ====================================================================== */
+    Pointer
+    ====================================================================== */
 
     pub(crate) fn on_area_mouse_down(&mut self, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
@@ -986,7 +1047,8 @@ impl Editor {
             ScrollDelta::Lines(l) => v2(l.x * 40.0, l.y * 40.0),
         };
         let d = if ev.modifiers.shift && d.x == 0.0 { v2(d.y, 0.0) } else { d };
-        self.scroll = v2((self.scroll.x - d.x).clamp(0.0, g.overflow.x), (self.scroll.y - d.y).clamp(0.0, g.overflow.y));
+        self.scroll =
+            v2((self.scroll.x - d.x).clamp(0.0, g.overflow.x), (self.scroll.y - d.y).clamp(0.0, g.overflow.y));
         cx.notify();
     }
 
@@ -1022,7 +1084,11 @@ impl Editor {
                 Handle::Corner(i) => {
                     // Pick the diagonal cursor closest to the rotated corner.
                     let diag = f.corners()[i] - f.center;
-                    if diag.x * diag.y > 0.0 { CursorStyle::ResizeUpLeftDownRight } else { CursorStyle::ResizeUpRightDownLeft }
+                    if diag.x * diag.y > 0.0 {
+                        CursorStyle::ResizeUpLeftDownRight
+                    } else {
+                        CursorStyle::ResizeUpRightDownLeft
+                    }
                 }
             });
         }
@@ -1031,8 +1097,8 @@ impl Editor {
     }
 
     /* ======================================================================
-       Crop
-       ====================================================================== */
+    Crop
+    ====================================================================== */
 
     pub(crate) fn enter_crop(&mut self) {
         // Start inset rather than full-bleed: the handles are then plainly
@@ -1048,9 +1114,7 @@ impl Editor {
         let c = self.crop?;
         let tl = g.to_screen(v2(c.x, c.y));
         let br = g.to_screen(v2(c.right(), c.bottom()));
-        let inside = |x: Pixels, y: Pixels| {
-            pos.x >= x && pos.x <= x + px(12.0) && pos.y >= y && pos.y <= y + px(12.0)
-        };
+        let inside = |x: Pixels, y: Pixels| pos.x >= x && pos.x <= x + px(12.0) && pos.y >= y && pos.y <= y + px(12.0);
         if inside(tl.x, tl.y) {
             Some(CropHandle::Nw)
         } else if inside(br.x - px(12.0), tl.y) {
@@ -1096,8 +1160,8 @@ impl Editor {
     }
 
     /* ======================================================================
-       Text editing
-       ====================================================================== */
+    Text editing
+    ====================================================================== */
 
     fn label(&self, id: Id) -> Option<Label> {
         match &self.doc.as_ref()?.get(id)?.shape {
@@ -1294,7 +1358,8 @@ impl Editor {
                 let range = if !sel.is_collapsed() {
                     sel.text_range()
                 } else if ctrl {
-                    let moved = if forward { sel.next_visual_word(lay, true) } else { sel.previous_visual_word(lay, true) };
+                    let moved =
+                        if forward { sel.next_visual_word(lay, true) } else { sel.previous_visual_word(lay, true) };
                     moved.text_range()
                 } else {
                     let at = sel.focus().index();
@@ -1401,7 +1466,13 @@ impl EntityInputHandler for Editor {
         }
     }
 
-    fn replace_text_in_range(&mut self, range: Option<Range<usize>>, new: &str, _: &mut Window, cx: &mut Context<Self>) {
+    fn replace_text_in_range(
+        &mut self,
+        range: Option<Range<usize>>,
+        new: &str,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(text) = self.edit_text() else { return };
         let r = match range {
             Some(r) => utf16_to_byte(&text, r.start)..utf16_to_byte(&text, r.end),
@@ -1459,7 +1530,10 @@ impl EntityInputHandler for Editor {
         let t = TextEngine::label_transform(&label).then(g.affine());
         let p0 = t.apply(v2(bb.x0 as f32, bb.y0 as f32));
         let p1 = t.apply(v2(bb.x1 as f32, bb.y1 as f32));
-        Some(Bounds::from_corners(point(px(p0.x.min(p1.x)), px(p0.y.min(p1.y))), point(px(p0.x.max(p1.x)), px(p0.y.max(p1.y)))))
+        Some(Bounds::from_corners(
+            point(px(p0.x.min(p1.x)), px(p0.y.min(p1.y))),
+            point(px(p0.x.max(p1.x)), px(p0.y.max(p1.y))),
+        ))
     }
 
     fn character_index_for_point(&mut self, pt: Point<Pixels>, _: &mut Window, _: &mut Context<Self>) -> Option<usize> {
@@ -1473,8 +1547,8 @@ impl EntityInputHandler for Editor {
 }
 
 /* ==========================================================================
-   Drawing helpers
-   ========================================================================== */
+Drawing helpers
+========================================================================== */
 
 fn to_point(p: V2) -> Point<Pixels> {
     point(px(p.x), px(p.y))
@@ -1627,9 +1701,16 @@ fn paint_handle_square(p: Point<Pixels>, window: &mut Window) {
     );
 }
 
-fn paint_handle_circle(p: Point<Pixels>, r: f32, fill: impl Into<gpui::Background>, border: impl Into<gpui::Background>, window: &mut Window) {
+fn paint_handle_circle(
+    p: Point<Pixels>,
+    r: f32,
+    fill: impl Into<gpui::Background>,
+    border: impl Into<gpui::Background>,
+    window: &mut Window,
+) {
     let b = Bounds::new(point(p.x - px(r), p.y - px(r)), size(px(r * 2.0), px(r * 2.0)));
-    window.paint_quad(PaintQuad::new(b).corner_radii(px(r)).background(fill).border_widths(px(1.5)).border_color(border));
+    window
+        .paint_quad(PaintQuad::new(b).corner_radii(px(r)).background(fill).border_widths(px(1.5)).border_color(border));
 }
 
 fn paint_dots(window: &mut Window, area: Bounds<Pixels>, theme: &Theme) {
@@ -1640,7 +1721,9 @@ fn paint_dots(window: &mut Window, area: Bounds<Pixels>, theme: &Theme) {
     while y < h {
         let mut x = 0.0;
         while x < w {
-            window.paint_quad(PaintQuad::new(bounds(x0 + x, y0 + y, 2.0, 2.0)).corner_radii(px(1.0)).background(theme.dot));
+            window.paint_quad(
+                PaintQuad::new(bounds(x0 + x, y0 + y, 2.0, 2.0)).corner_radii(px(1.0)).background(theme.dot),
+            );
             x += step;
         }
         y += step;
@@ -1655,12 +1738,20 @@ fn paint_scrollbars(g: &StageGeom, theme: &Theme, window: &mut Window) {
         let len = (a.w * a.w / content_w).max(24.0);
         let scroll_x = f32::from(g.area.origin.x) + AREA_PAD - f32::from(g.stage.origin.x);
         let x = a.x + (a.w - len) * (scroll_x / g.overflow.x).clamp(0.0, 1.0);
-        window.paint_quad(PaintQuad::new(bounds(x + 3.0, a.bottom() - 7.0, len - 6.0, 4.0)).corner_radii(px(2.0)).background(theme.border));
+        window.paint_quad(
+            PaintQuad::new(bounds(x + 3.0, a.bottom() - 7.0, len - 6.0, 4.0))
+                .corner_radii(px(2.0))
+                .background(theme.border),
+        );
     }
     if g.overflow.y > 0.0 {
         let len = (a.h * a.h / content_h).max(24.0);
         let scroll_y = f32::from(g.area.origin.y) + AREA_PAD - f32::from(g.stage.origin.y);
         let y = a.y + (a.h - len) * (scroll_y / g.overflow.y).clamp(0.0, 1.0);
-        window.paint_quad(PaintQuad::new(bounds(a.right() - 7.0, y + 3.0, 4.0, len - 6.0)).corner_radii(px(2.0)).background(theme.border));
+        window.paint_quad(
+            PaintQuad::new(bounds(a.right() - 7.0, y + 3.0, 4.0, len - 6.0))
+                .corner_radii(px(2.0))
+                .background(theme.border),
+        );
     }
 }

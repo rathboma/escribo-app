@@ -109,12 +109,8 @@ pub fn compose(doc: &Document, settings: &Settings, text: &mut TextEngine) -> Op
     let (out_w, out_h) = export_size(settings, &layout);
     let style = &settings.style;
     let adv = settings.kit().advanced;
-    let shot_rect = Rect::new(
-        layout.shot_x as f32 * k,
-        layout.shot_y as f32 * k,
-        shot.width as f32 * k,
-        shot.height as f32 * k,
-    );
+    let shot_rect =
+        Rect::new(layout.shot_x as f32 * k, layout.shot_y as f32 * k, shot.width as f32 * k, shot.height as f32 * k);
     let radius = if style.pad > 0 { shot_rect.w * (adv.corner_radius as f32 / 100.0) } else { 0.0 };
 
     let mut out = Pixmap::new(out_w, out_h)?;
@@ -167,9 +163,7 @@ fn draw_shot(out: &mut Pixmap, shot: &Shot, rect: Rect, radius: f32) {
     };
     let mask = if radius > 0.0 {
         let mut m = Mask::new(out.width(), out.height());
-        let path = Path::round_rect(rect.w, rect.h, radius)
-            .transformed(&Affine::translate(rect.center()))
-            .to_skia();
+        let path = Path::round_rect(rect.w, rect.h, radius).transformed(&Affine::translate(rect.center())).to_skia();
         if let (Some(m), Some(path)) = (m.as_mut(), path) {
             m.fill_path(&path, FillRule::Winding, true, tiny_skia::Transform::identity());
         }
@@ -187,7 +181,14 @@ fn draw_shot(out: &mut Pixmap, shot: &Shot, rect: Rect, radius: f32) {
     let t = tiny_skia::Transform::from_row(sx, 0.0, 0.0, sy, rect.x, rect.y);
     let pp = PixmapPaint { quality, blend_mode: BlendMode::SourceOver, opacity: 1.0 };
     if exact {
-        out.draw_pixmap(rect.x.round() as i32, rect.y.round() as i32, src.as_ref(), &pp, tiny_skia::Transform::identity(), mask.as_ref());
+        out.draw_pixmap(
+            rect.x.round() as i32,
+            rect.y.round() as i32,
+            src.as_ref(),
+            &pp,
+            tiny_skia::Transform::identity(),
+            mask.as_ref(),
+        );
     } else {
         out.draw_pixmap(0, 0, src.as_ref(), &pp, t, mask.as_ref());
     }
@@ -264,13 +265,24 @@ pub fn draw_redact(target: &mut Pixmap, box_: Rect, shot: &Shot, t: Affine) {
     };
     let tl = t.apply(v2(clip.x, clip.y));
     let br = t.apply(v2(clip.right(), clip.bottom()));
-    let Some(clip_px) = raster::clip_rect(tl.x.min(br.x), tl.y.min(br.y), tl.x.max(br.x), tl.y.max(br.y), target.width(), target.height())
-    else {
+    let Some(clip_px) = raster::clip_rect(
+        tl.x.min(br.x),
+        tl.y.min(br.y),
+        tl.x.max(br.x),
+        tl.y.max(br.y),
+        target.width(),
+        target.height(),
+    ) else {
         return;
     };
     let Some(plate) = shot.plate() else {
         // Unreadable shot: a solid fill hides as much as the blocks do.
-        if let Some(r) = tiny_skia::Rect::from_xywh(clip_px.x() as f32, clip_px.y() as f32, clip_px.width() as f32, clip_px.height() as f32) {
+        if let Some(r) = tiny_skia::Rect::from_xywh(
+            clip_px.x() as f32,
+            clip_px.y() as f32,
+            clip_px.width() as f32,
+            clip_px.height() as f32,
+        ) {
             target.fill_rect(r, &paint(Rgb::new(0x10, 0x10, 0x14), 1.0), tiny_skia::Transform::identity(), None);
         }
         return;
@@ -340,7 +352,14 @@ pub fn watermark_box(settings: &Settings, text: &mut TextEngine, out_w: f32, out
 /// Bottom-right of the output, sized and inset off its width, so it lands in
 /// the same corner whether or not there is padding or extra canvas. `t` maps
 /// output pixels to target pixels.
-pub fn draw_watermark(target: &mut Pixmap, settings: &Settings, text: &mut TextEngine, out_w: f32, out_h: f32, t: Affine) {
+pub fn draw_watermark(
+    target: &mut Pixmap,
+    settings: &Settings,
+    text: &mut TextEngine,
+    out_w: f32,
+    out_h: f32,
+    t: Affine,
+) {
     let kit = settings.kit();
     let WatermarkBox { rect, size } = watermark_box(settings, text, out_w, out_h);
     let icon = size * 0.95;
@@ -351,14 +370,15 @@ pub fn draw_watermark(target: &mut Pixmap, settings: &Settings, text: &mut TextE
     let s = t.scale_factor();
 
     // The pill and its soft shadow.
-    if let Some(path) = Path::round_rect(rect.w, rect.h, size * 0.45)
-        .transformed(&Affine::translate(rect.center()).then(t))
-        .to_skia()
+    if let Some(path) =
+        Path::round_rect(rect.w, rect.h, size * 0.45).transformed(&Affine::translate(rect.center()).then(t)).to_skia()
     {
         let blur = size * 0.3 * s;
         let pad = (blur * 1.5).ceil() + 2.0;
         let b = path.bounds();
-        if let Some(mut layer) = Pixmap::new((b.width() + pad * 2.0).ceil() as u32, (b.height() + pad * 2.0).ceil() as u32) {
+        if let Some(mut layer) =
+            Pixmap::new((b.width() + pad * 2.0).ceil() as u32, (b.height() + pad * 2.0).ceil() as u32)
+        {
             let shift = tiny_skia::Transform::from_translate(pad - b.left(), pad - b.top());
             layer.fill_path(&path, &paint(Rgb::BLACK, 0.12), FillRule::Winding, shift, None);
             raster::blur(&mut layer, blur / 2.0);
@@ -457,7 +477,7 @@ mod tests {
         s.style.watermark = false;
         let (w, h, px) = compose(&d, &s, &mut TextEngine::new()).unwrap();
         assert_eq!((w, h), (64, 48));
-        assert_eq!(px, d.shot.rgba);
+        assert_eq!(px, *d.shot.rgba);
     }
 
     #[test]

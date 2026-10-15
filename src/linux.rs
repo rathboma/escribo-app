@@ -22,15 +22,16 @@ pub enum Command {
 pub type Sender = smol::channel::Sender<Command>;
 
 /* ==========================================================================
-   Tray
-   ========================================================================== */
+Tray
+========================================================================== */
 
 struct Tray {
     tx: Sender,
 }
 
 fn tray_icon() -> Vec<ksni::Icon> {
-    let Ok(img) = image::load_from_memory_with_format(include_bytes!("../build/tray-icon.png"), image::ImageFormat::Png)
+    let Ok(img) =
+        image::load_from_memory_with_format(include_bytes!("../build/tray-icon.png"), image::ImageFormat::Png)
     else {
         return Vec::new();
     };
@@ -43,7 +44,7 @@ fn tray_icon() -> Vec<ksni::Icon> {
 
 impl ksni::Tray for Tray {
     fn id(&self) -> String {
-        crate::app::APP_ID.into()
+        "escribo".into()
     }
 
     fn title(&self) -> String {
@@ -52,7 +53,7 @@ impl ksni::Tray for Tray {
 
     fn icon_name(&self) -> String {
         // Installed packages ship a themed icon; the pixmap covers the AppImage.
-        "escribo".into()
+        crate::app::APP_ID.into()
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
@@ -109,8 +110,8 @@ pub fn start_tray(tx: Sender) {
 }
 
 /* ==========================================================================
-   Screenshots folder
-   ========================================================================== */
+Screenshots folder
+========================================================================== */
 
 pub fn screenshots_dir() -> PathBuf {
     crate::app::pictures_dir().join("Screenshots")
@@ -126,7 +127,10 @@ pub fn watch_screenshots(tx: Sender) {
     std::thread::Builder::new()
         .name("watcher".into())
         .spawn(move || {
-            use notify::{EventKind, RecursiveMode, Watcher, event::{CreateKind, ModifyKind, RenameMode}};
+            use notify::{
+                EventKind, RecursiveMode, Watcher,
+                event::{CreateKind, ModifyKind, RenameMode},
+            };
             let (etx, erx) = std::sync::mpsc::channel();
             let mut watcher = match notify::recommended_watcher(etx) {
                 Ok(w) => w,
@@ -195,19 +199,20 @@ fn wait_until_written(path: &Path) -> bool {
 }
 
 /* ==========================================================================
-   Single instance
-   ========================================================================== */
+Single instance
+========================================================================== */
 
 fn socket_path() -> PathBuf {
     let dir = std::env::var_os("XDG_RUNTIME_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|| std::env::temp_dir().join(format!("escribo-{}", user_name())));
+        .unwrap_or_else(|| std::env::temp_dir().join(format!("escribo-{}", uid())));
     std::fs::create_dir_all(&dir).ok();
     dir.join("escribo.sock")
 }
 
-fn user_name() -> String {
-    std::env::var("USER").unwrap_or_else(|_| "user".into())
+fn uid() -> u32 {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata("/proc/self").map(|m| m.uid()).unwrap_or(0)
 }
 
 /// Hands `files` to an escribo that is already running. True when one was
@@ -225,6 +230,13 @@ pub fn forward_to_running(files: &[PathBuf]) -> bool {
         msg.push_str(&format!("open {}\n", abs.display()));
     }
     stream.write_all(msg.as_bytes()).is_ok()
+}
+
+/// Asks a running escribo to quit (`escribo --quit`).
+pub fn quit_running() {
+    if let Ok(mut stream) = UnixStream::connect(socket_path()) {
+        stream.write_all(b"quit\n").ok();
+    }
 }
 
 /// Listens for later launches handing over their files.
@@ -245,6 +257,8 @@ pub fn listen_for_instances(tx: Sender) {
                 for line in BufReader::new(stream).lines().map_while(Result::ok) {
                     let cmd = if let Some(p) = line.strip_prefix("open ") {
                         Command::Open(PathBuf::from(p))
+                    } else if line == "quit" {
+                        Command::Quit
                     } else {
                         Command::NewWindow
                     };
@@ -256,8 +270,8 @@ pub fn listen_for_instances(tx: Sender) {
 }
 
 /* ==========================================================================
-   AppImage updates
-   ========================================================================== */
+AppImage updates
+========================================================================== */
 
 const RELEASES: &str = "https://api.github.com/repos/rathboma/escribo-app/releases/latest";
 

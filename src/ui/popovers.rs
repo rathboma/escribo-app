@@ -2,16 +2,21 @@
 //! toast) and the popovers: copy menu, presets, aspect ratio & export size,
 //! padding & fill.
 
-use super::widgets::{Tip, button, field, icon, icon_button, mark, panel, pop_label, pop_note, primary_button, seg_button, segmented, SliderId};
+use super::widgets::{
+    SliderId, Tip, button, field, icon, icon_button, mark, panel, pop_label, pop_note, primary_button, seg_button,
+    segmented,
+};
 use super::{Editor, Field, Popover, PrefsTab, any, set_input_unless_focused};
 use crate::app;
 use crate::doc::{EMOJIS, Tool};
 use crate::settings::{self, GRAD_NAMES, SCALES, SOLID_NAMES, Settings, slug};
 use crate::theme::Theme;
 use gpui::{
-    AnyElement, Context, Focusable, ExternalPaths, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
-    ParentElement, PromptLevel, StatefulInteractiveElement, Styled, Window, canvas, div, prelude::FluentBuilder as _, px,
+    AnyElement, Context, ExternalPaths, Focusable, FontWeight, InteractiveElement, IntoElement, MouseButton,
+    ParentElement, PromptLevel, StatefulInteractiveElement, Styled, Window, canvas, div, prelude::FluentBuilder as _,
+    px,
 };
+use gpui_ce_elements::editable_text::actions::{Enter, Escape};
 
 impl Editor {
     pub(super) fn render_area(&mut self, theme: &Theme, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -185,13 +190,15 @@ impl Editor {
                     .pr(px(8.0))
                     .py(px(7.0))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .child(div().text_size(px(12.0)).text_color(theme.muted).child(format!(
+                        "{} × {}",
+                        c.w.round(),
+                        c.h.round()
+                    )))
                     .child(
-                        div()
-                            .text_size(px(12.0))
-                            .text_color(theme.muted)
-                            .child(format!("{} × {}", c.w.round(), c.h.round())),
+                        button("crop-cancel", "Cancel", theme)
+                            .on_click(cx.listener(|this, _, _, cx| this.set_tool(Tool::Select, cx))),
                     )
-                    .child(button("crop-cancel", "Cancel", theme).on_click(cx.listener(|this, _, _, cx| this.set_tool(Tool::Select, cx))))
                     .child(
                         primary_button("crop-apply", "Apply crop", theme)
                             .on_click(cx.listener(|this, _, window, cx| this.apply_crop(window, cx))),
@@ -233,12 +240,14 @@ impl Editor {
                     .w(px(216.0))
                     .p(px(5.0))
                     .on_mouse_down_out(cx.listener(|this, _, _, cx| this.close_popover_from_outside(Popover::Copy, cx)))
-                    .child(item("copy-menu-copy", "copy", "Copy", "Ctrl C").on_click(cx.listener(|this, _, window, cx| {
-                        this.copy_image(false, window, cx)
-                    })))
-                    .child(item("copy-menu-close", "copy-close", "Copy & close", "⇧Ctrl C").on_click(cx.listener(
-                        |this, _, window, cx| this.copy_image(true, window, cx),
-                    ))),
+                    .child(
+                        item("copy-menu-copy", "copy", "Copy", "Ctrl C")
+                            .on_click(cx.listener(|this, _, window, cx| this.copy_image(false, window, cx))),
+                    )
+                    .child(
+                        item("copy-menu-close", "copy-close", "Copy & close", "⇧Ctrl C")
+                            .on_click(cx.listener(|this, _, window, cx| this.copy_image(true, window, cx))),
+                    ),
             )
             .into_any_element()
     }
@@ -257,12 +266,12 @@ impl Editor {
         };
         let ratios = super::chrome::ratios().iter().enumerate().map(|(i, ratio)| {
             let id = ratio.id;
-            seg_button(("ratio", i), ratio.label, s.style.ratio == ratio.id, theme)
-                .tooltip_text(ratio.hint)
-                .on_click(cx.listener(move |this, _, _, cx| {
+            seg_button(("ratio", i), ratio.label, s.style.ratio == ratio.id, theme).tooltip_text(ratio.hint).on_click(
+                cx.listener(move |this, _, _, cx| {
                     this.update_settings(cx, |s| s.style.ratio = id.to_string());
                     this.sync_after_style(cx);
-                }))
+                }),
+            )
         });
         let layout = self.doc.as_ref().map(|d| crate::render::layout_for(&s, &d.shot));
         let out_h = layout.map(|l| {
@@ -292,7 +301,9 @@ impl Editor {
                     .occlude()
                     .w(px(252.0))
                     .p(px(13.0))
-                    .on_mouse_down_out(cx.listener(|this, _, _, cx| this.close_popover_from_outside(Popover::Ratio, cx)))
+                    .on_mouse_down_out(
+                        cx.listener(|this, _, _, cx| this.close_popover_from_outside(Popover::Ratio, cx)),
+                    )
                     .child(pop_label("Aspect ratio", theme))
                     .child(segmented(theme).mb(px(11.0)).children(ratios))
                     .child(pop_note(ratio_note, theme))
@@ -308,12 +319,10 @@ impl Editor {
                                     .w(px(76.0))
                                     .flex_none()
                                     .flex()
-                                    .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
-                                        if ev.keystroke.key == "enter" {
-                                            this.commit_out_w(cx);
-                                            window.focus(&this.focus, cx);
-                                            cx.stop_propagation();
-                                        }
+                                    .capture_action(cx.listener(|this, _: &Enter, window, cx| {
+                                        this.commit_out_w(cx);
+                                        window.focus(&this.focus, cx);
+                                        cx.stop_propagation();
                                     }))
                                     .child(field("out-w", &self.inputs.out_w, "", theme)),
                             )
@@ -417,7 +426,9 @@ impl Editor {
                     .occlude()
                     .w(px(252.0))
                     .p(px(13.0))
-                    .on_mouse_down_out(cx.listener(|this, _, _, cx| this.close_popover_from_outside(Popover::Backdrop, cx)))
+                    .on_mouse_down_out(
+                        cx.listener(|this, _, _, cx| this.close_popover_from_outside(Popover::Backdrop, cx)),
+                    )
                     .child(self.pad_row(SliderId::Pad, theme, cx))
                     .child(pop_note(Self::pad_note(&s), theme).mb(px(15.0)))
                     .child(pop_label("Fill — solid", theme))
@@ -498,16 +509,14 @@ impl Editor {
                             }
                         })),
                 )
-                .child(
-                    icon_button(("preset-delete", i), "close", 11.0, 22.0, theme)
-                        .tooltip_text("Delete")
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            let id = id_delete.clone();
-                            this.confirm(format!("Delete preset “{name}”?"), window, cx, move |this, cx| {
-                                this.update_settings(cx, |s| s.delete_preset(&id));
-                            });
-                        })),
-                )
+                .child(icon_button(("preset-delete", i), "close", 11.0, 22.0, theme).tooltip_text("Delete").on_click(
+                    cx.listener(move |this, _, window, cx| {
+                        let id = id_delete.clone();
+                        this.confirm(format!("Delete preset “{name}”?"), window, cx, move |this, cx| {
+                            this.update_settings(cx, |s| s.delete_preset(&id));
+                        });
+                    }),
+                ))
         });
         let empty = profile.presets.is_empty();
         let presets_for_export = profile.presets.clone();
@@ -568,18 +577,15 @@ impl Editor {
                                 .flex()
                                 .gap(px(6.0))
                                 .mb(px(10.0))
-                                .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| match ev.keystroke.key.as_str() {
-                                    "enter" => {
-                                        this.submit_preset_form(window, cx);
-                                        cx.stop_propagation();
-                                    }
-                                    "escape" => {
-                                        this.preset_form = false;
-                                        window.focus(&this.focus, cx);
-                                        cx.stop_propagation();
-                                        cx.notify();
-                                    }
-                                    _ => {}
+                                .capture_action(cx.listener(|this, _: &Enter, window, cx| {
+                                    this.submit_preset_form(window, cx);
+                                    cx.stop_propagation();
+                                }))
+                                .capture_action(cx.listener(|this, _: &Escape, window, cx| {
+                                    this.preset_form = false;
+                                    window.focus(&this.focus, cx);
+                                    cx.stop_propagation();
+                                    cx.notify();
                                 }))
                                 .child(field("preset-name", &self.inputs.preset_name, "Preset name", theme))
                                 .child(primary_button("preset-save", "Save", theme).on_click(cx.listener(|this, _, window, cx| {
@@ -650,11 +656,19 @@ impl Editor {
 
     /* --- Files ------------------------------------------------------------- */
 
-    pub(crate) fn export_json(&mut self, text: String, name: String, label: &'static str, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn export_json(
+        &mut self,
+        text: String,
+        name: String,
+        label: &'static str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         cx.spawn_in(window, async move |this, cx| {
-            let result = app::save_with_dialog(cx, app::documents_dir(), name, text.into_bytes()).await;
+            let result = app::save_or_fallback(cx, app::documents_dir(), name, text.into_bytes()).await;
             this.update(cx, |this, cx| match result {
-                Ok(Some(_)) => this.show_toast(format!("{label} exported"), cx),
+                Ok(Some((_, true))) => this.show_toast(format!("{label} exported"), cx),
+                Ok(Some((path, false))) => this.show_toast(format!("{label} exported to {}", app::tilde(&path)), cx),
                 Ok(None) => {}
                 Err(err) => {
                     log::error!("export failed: {err:#}");

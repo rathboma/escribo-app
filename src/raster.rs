@@ -31,8 +31,8 @@ fn box_sizes(sigma: f32, n: usize) -> Vec<usize> {
         wl -= 1;
     }
     let wu = wl + 2;
-    let m_ideal = (12.0 * sigma * sigma - n_f * (wl * wl) as f32 - 4.0 * n_f * wl as f32 - 3.0 * n_f)
-        / (-4.0 * wl as f32 - 4.0);
+    let m_ideal =
+        (12.0 * sigma * sigma - n_f * (wl * wl) as f32 - 4.0 * n_f * wl as f32 - 3.0 * n_f) / (-4.0 * wl as f32 - 4.0);
     let m = m_ideal.round() as i32;
     (0..n as i32).map(|i| (((if i < m { wl } else { wu }) - 1) / 2).max(0) as usize).collect()
 }

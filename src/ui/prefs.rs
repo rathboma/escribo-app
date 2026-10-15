@@ -2,16 +2,19 @@
 //! watermark, the profiles themselves — and the colour picker the colour
 //! wells open.
 
-use super::widgets::{Tip, SliderId, button, field, icon, icon_button, pop_label, primary_button, seg_button, segmented};
+use super::widgets::{
+    SliderId, Tip, button, field, icon, icon_button, pop_label, primary_button, seg_button, segmented,
+};
 use super::{ColorPicker, ColorTarget, Editor, Field, PrefsTab, ProfileForm, any};
 use crate::doc::{Rgb, rgb};
 use crate::settings::{ADVANCED_META, FONTS, GRAD_NAMES, SOLID_NAMES, Settings, WmMode, format_advanced, plural, slug};
 use crate::theme::{self, Theme};
 use gpui::{
-    AnyElement, Bounds, ClickEvent, Context, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
-    MouseDownEvent, PaintQuad, ParentElement, Pixels, Point, StatefulInteractiveElement, Styled, Window, canvas,
-    deferred, div, point, prelude::FluentBuilder as _, px, size,
+    AnyElement, Bounds, ClickEvent, Context, FontWeight, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
+    PaintQuad, ParentElement, Pixels, Point, StatefulInteractiveElement, Styled, Window, canvas, deferred, div, point,
+    prelude::FluentBuilder as _, px, size,
 };
+use gpui_ce_elements::editable_text::actions::{Enter, Escape};
 
 const TABS: [(PrefsTab, &str, &str); 5] = [
     (PrefsTab::Annotate, "arrow", "Annotations"),
@@ -53,37 +56,47 @@ fn cell() -> gpui::Div {
 }
 
 impl Editor {
-    pub(super) fn render_prefs(&mut self, tab: PrefsTab, theme: &Theme, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_prefs(
+        &mut self,
+        tab: PrefsTab,
+        theme: &Theme,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let s = self.s(cx).clone();
         let profile_name = s.profile().name.clone();
         let hover = theme.hover;
-        let tabs = TABS.iter().enumerate().map(|(i, (t, icon_name, label))| {
-            let selected = *t == tab;
-            let t = *t;
-            let color = if selected { crate::theme::WHITE } else { theme.text };
-            div()
-                .id(("prefs-tab", i))
-                .h(px(32.0))
-                .px(px(10.0))
-                .flex()
-                .items_center()
-                .gap(px(9.0))
-                .rounded(px(7.0))
-                .text_size(px(12.5))
-                .font_weight(FontWeight(550.0))
-                .text_color(color)
-                .cursor_pointer()
-                .map(|el| if selected { el.bg(theme.accent) } else { el.hover(move |st| st.bg(hover)) })
-                .child(icon(icon_name, 14.0, color))
-                .child(*label)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.prefs = Some(t);
-                    if t != PrefsTab::Profiles {
-                        this.profile_form = None;
-                    }
-                    cx.notify();
-                }))
-        }).collect::<Vec<_>>();
+        let tabs = TABS
+            .iter()
+            .enumerate()
+            .map(|(i, (t, icon_name, label))| {
+                let selected = *t == tab;
+                let t = *t;
+                let color = if selected { crate::theme::WHITE } else { theme.text };
+                div()
+                    .id(("prefs-tab", i))
+                    .h(px(32.0))
+                    .px(px(10.0))
+                    .flex()
+                    .items_center()
+                    .gap(px(9.0))
+                    .rounded(px(7.0))
+                    .text_size(px(12.5))
+                    .font_weight(FontWeight(550.0))
+                    .text_color(color)
+                    .cursor_pointer()
+                    .map(|el| if selected { el.bg(theme.accent) } else { el.hover(move |st| st.bg(hover)) })
+                    .child(icon(icon_name, 14.0, color))
+                    .child(*label)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.prefs = Some(t);
+                        if t != PrefsTab::Profiles {
+                            this.profile_form = None;
+                        }
+                        cx.notify();
+                    }))
+            })
+            .collect::<Vec<_>>();
         let content = match tab {
             PrefsTab::Annotate => self.prefs_annotate(&s, theme, cx),
             PrefsTab::Backdrop => self.prefs_backdrop(&s, theme, cx),
@@ -213,7 +226,14 @@ impl Editor {
     }
 
     /// A clickable colour square that opens the picker for `target`.
-    fn well(&self, id: (&'static str, usize), color: Rgb, target: ColorTarget, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
+    fn well(
+        &self,
+        id: (&'static str, usize),
+        color: Rgb,
+        target: ColorTarget,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         div()
             .id(id)
             .size(px(24.0))
@@ -231,39 +251,50 @@ impl Editor {
     fn prefs_annotate(&self, s: &Settings, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
         let kit = s.kit();
         let hover = theme.hover;
-        let rows = kit.palette.iter().enumerate().map(|(i, hex)| {
-            let star = kit.default_idx == i;
-            cell().child(
-                pref_row(theme)
-                    .child(self.well(("pal-well", i), rgb(hex), ColorTarget::Palette(i), theme, cx))
-                    .child(div().flex_1().text_size(px(11.5)).font_weight(FontWeight(600.0)).child(hex.to_uppercase()))
-                    .child(
-                        div()
-                            .id(("star", i))
-                            .size(px(24.0))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded(px(6.0))
-                            .cursor_pointer()
-                            .hover(move |st| st.bg(hover))
-                            .tooltip_text("Arm by default")
-                            .child(icon("star", 13.0, if star { theme.accent } else { theme.border }))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.update_settings(cx, |s| s.kit_mut().default_idx = i);
-                                this.color_idx = i;
-                                cx.notify();
-                            })),
-                    ),
-            )
-        }).collect::<Vec<_>>();
+        let rows = kit
+            .palette
+            .iter()
+            .enumerate()
+            .map(|(i, hex)| {
+                let star = kit.default_idx == i;
+                cell().child(
+                    pref_row(theme)
+                        .child(self.well(("pal-well", i), rgb(hex), ColorTarget::Palette(i), theme, cx))
+                        .child(
+                            div().flex_1().text_size(px(11.5)).font_weight(FontWeight(600.0)).child(hex.to_uppercase()),
+                        )
+                        .child(
+                            div()
+                                .id(("star", i))
+                                .size(px(24.0))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(px(6.0))
+                                .cursor_pointer()
+                                .hover(move |st| st.bg(hover))
+                                .tooltip_text("Arm by default")
+                                .child(icon("star", 13.0, if star { theme.accent } else { theme.border }))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.update_settings(cx, |s| s.kit_mut().default_idx = i);
+                                    this.color_idx = i;
+                                    cx.notify();
+                                })),
+                        ),
+                )
+            })
+            .collect::<Vec<_>>();
         let current_font = kit.font.clone();
-        let fonts = FONTS.iter().enumerate().map(|(i, f)| {
-            let id = f.id;
-            seg_button(("font", i), f.label, current_font == f.id, theme)
-                .font_family(f.css.split(',').next().unwrap_or("sans-serif").trim().trim_matches('"').to_string())
-                .on_click(cx.listener(move |this, _, _, cx| this.set_font(id, cx)))
-        }).collect::<Vec<_>>();
+        let fonts = FONTS
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                let id = f.id;
+                seg_button(("font", i), f.label, current_font == f.id, theme)
+                    .font_family(f.css.split(',').next().unwrap_or("sans-serif").trim().trim_matches('"').to_string())
+                    .on_click(cx.listener(move |this, _, _, cx| this.set_font(id, cx)))
+            })
+            .collect::<Vec<_>>();
         div()
             .child(title("Annotation palette", theme))
             .child(note("Six colours appear in the toolbar. The starred one is armed when a screenshot opens.", theme))
@@ -274,12 +305,10 @@ impl Editor {
             .child(
                 div()
                     .flex()
-                    .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
-                        if ev.keystroke.key == "enter" {
-                            this.commit_font(cx);
-                            window.focus(&this.focus, cx);
-                            cx.stop_propagation();
-                        }
+                    .capture_action(cx.listener(|this, _: &Enter, window, cx| {
+                        this.commit_font(cx);
+                        window.focus(&this.focus, cx);
+                        cx.stop_propagation();
                     }))
                     .child(field("font-custom", &self.inputs.font, "Or any installed font family, e.g. Inter", theme)),
             )
@@ -288,32 +317,49 @@ impl Editor {
 
     fn prefs_backdrop(&self, s: &Settings, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
         let kit = s.kit();
-        let solids = kit.solid_bg.iter().enumerate().map(|(i, hex)| {
-            cell().child(
-                pref_row(theme)
-                    .child(self.well(("solid-well", i), rgb(hex), ColorTarget::Solid(i), theme, cx))
-                    .child(div().flex_1().text_size(px(11.5)).font_weight(FontWeight(600.0)).child(SOLID_NAMES[i])),
-            )
-        }).collect::<Vec<_>>();
-        let grads = kit.grad_bg.iter().enumerate().map(|(i, g)| {
-            cell().child(
-                pref_row(theme)
-                    .gap(px(8.0))
-                    .child(self.well(("grad-a", i), rgb(&g.a), ColorTarget::GradA(i), theme, cx))
-                    .child(div().w(px(44.0)).flex_none().text_size(px(11.5)).font_weight(FontWeight(600.0)).child(GRAD_NAMES[i]))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w(px(0.0))
-                            .h(px(16.0))
-                            .rounded(px(4.0))
-                            .border_1()
-                            .border_color(theme.border)
-                            .bg(super::stage::gradient(rgb(&g.a), rgb(&g.b), Bounds::default())),
-                    )
-                    .child(self.well(("grad-b", i), rgb(&g.b), ColorTarget::GradB(i), theme, cx)),
-            )
-        }).collect::<Vec<_>>();
+        let solids = kit
+            .solid_bg
+            .iter()
+            .enumerate()
+            .map(|(i, hex)| {
+                cell().child(
+                    pref_row(theme)
+                        .child(self.well(("solid-well", i), rgb(hex), ColorTarget::Solid(i), theme, cx))
+                        .child(div().flex_1().text_size(px(11.5)).font_weight(FontWeight(600.0)).child(SOLID_NAMES[i])),
+                )
+            })
+            .collect::<Vec<_>>();
+        let grads = kit
+            .grad_bg
+            .iter()
+            .enumerate()
+            .map(|(i, g)| {
+                cell().child(
+                    pref_row(theme)
+                        .gap(px(8.0))
+                        .child(self.well(("grad-a", i), rgb(&g.a), ColorTarget::GradA(i), theme, cx))
+                        .child(
+                            div()
+                                .w(px(44.0))
+                                .flex_none()
+                                .text_size(px(11.5))
+                                .font_weight(FontWeight(600.0))
+                                .child(GRAD_NAMES[i]),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w(px(0.0))
+                                .h(px(16.0))
+                                .rounded(px(4.0))
+                                .border_1()
+                                .border_color(theme.border)
+                                .bg(super::stage::gradient(rgb(&g.a), rgb(&g.b), Bounds::default())),
+                        )
+                        .child(self.well(("grad-b", i), rgb(&g.b), ColorTarget::GradB(i), theme, cx)),
+                )
+            })
+            .collect::<Vec<_>>();
         div()
             .child(title("Padding fill presets", theme))
             .child(note("Used for the margin and any extra canvas. Pick one from Padding in the status bar.", theme))
@@ -443,16 +489,24 @@ impl Editor {
                             }
                         })),
                 )
-                .child(div().mr(px(4.0)).text_size(px(10.5)).text_color(theme.muted).child(format!("{n} preset{}", plural(n))))
                 .child(
-                    icon_button(("profile-rename", i), "rename", 12.0, 22.0, theme)
-                        .tooltip_text("Rename")
-                        .on_click(cx.listener(move |this, _, window, cx| this.open_profile_form(ProfileForm::Rename(id_rename.clone()), window, cx))),
+                    div()
+                        .mr(px(4.0))
+                        .text_size(px(10.5))
+                        .text_color(theme.muted)
+                        .child(format!("{n} preset{}", plural(n))),
                 )
+                .child(icon_button(("profile-rename", i), "rename", 12.0, 22.0, theme).tooltip_text("Rename").on_click(
+                    cx.listener(move |this, _, window, cx| {
+                        this.open_profile_form(ProfileForm::Rename(id_rename.clone()), window, cx)
+                    }),
+                ))
                 .child(
-                    icon_button(("profile-dup", i), "duplicate", 12.0, 22.0, theme)
-                        .tooltip_text("Duplicate")
-                        .on_click(cx.listener(move |this, _, window, cx| this.open_profile_form(ProfileForm::Duplicate(id_dup.clone()), window, cx))),
+                    icon_button(("profile-dup", i), "duplicate", 12.0, 22.0, theme).tooltip_text("Duplicate").on_click(
+                        cx.listener(move |this, _, window, cx| {
+                            this.open_profile_form(ProfileForm::Duplicate(id_dup.clone()), window, cx)
+                        }),
+                    ),
                 )
                 .child(
                     icon_button(("profile-export", i), "export", 12.0, 22.0, theme)
@@ -502,18 +556,15 @@ impl Editor {
                         .flex()
                         .gap(px(6.0))
                         .mb(px(10.0))
-                        .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| match ev.keystroke.key.as_str() {
-                            "enter" => {
-                                this.submit_profile_form(window, cx);
-                                cx.stop_propagation();
-                            }
-                            "escape" => {
-                                this.profile_form = None;
-                                window.focus(&this.focus, cx);
-                                cx.stop_propagation();
-                                cx.notify();
-                            }
-                            _ => {}
+                        .capture_action(cx.listener(|this, _: &Enter, window, cx| {
+                            this.submit_profile_form(window, cx);
+                            cx.stop_propagation();
+                        }))
+                        .capture_action(cx.listener(|this, _: &Escape, window, cx| {
+                            this.profile_form = None;
+                            window.focus(&this.focus, cx);
+                            cx.stop_propagation();
+                            cx.notify();
                         }))
                         .child(field("profile-name", &self.inputs.profile_name, "Profile name", theme))
                         .child(primary_button("profile-form-save", form_label, theme).on_click(cx.listener(|this, _, window, cx| {
@@ -589,8 +640,8 @@ impl Editor {
     }
 
     /* ======================================================================
-       Colour picker
-       ====================================================================== */
+    Colour picker
+    ====================================================================== */
 
     fn target_color(&self, target: ColorTarget, cx: &gpui::App) -> Rgb {
         let kit = self.s(cx).kit();
@@ -657,7 +708,12 @@ impl Editor {
         cx.notify();
     }
 
-    pub(super) fn render_color_picker(&mut self, theme: &Theme, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_color_picker(
+        &mut self,
+        theme: &Theme,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let Some(p) = &self.color_picker else { return any(div()) };
         let (h, s, v) = (p.h, p.s, p.v);
         let current = hsv_to_rgb(h, s, v);
@@ -695,12 +751,15 @@ impl Editor {
                 .absolute()
                 .inset_0()
                 .occlude()
-                .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
-                    this.commit_hex(cx);
-                    this.color_picker = None;
-                    window.focus(&this.focus, cx);
-                    cx.notify();
-                }))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _, window, cx| {
+                        this.commit_hex(cx);
+                        this.color_picker = None;
+                        window.focus(&this.focus, cx);
+                        cx.notify();
+                    }),
+                )
                 .child(
                     super::widgets::panel(theme)
                         .id("color-picker")
@@ -722,11 +781,14 @@ impl Editor {
                                 .rounded(px(6.0))
                                 .overflow_hidden()
                                 .cursor_pointer()
-                                .on_mouse_down(MouseButton::Left, cx.listener(|this, ev: &MouseDownEvent, _, cx| {
-                                    this.drag = Some(super::stage::Drag::Slider(SliderId::Sv));
-                                    this.slider_to(SliderId::Sv, ev.position, cx);
-                                    cx.stop_propagation();
-                                }))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, ev: &MouseDownEvent, _, cx| {
+                                        this.drag = Some(super::stage::Drag::Slider(SliderId::Sv));
+                                        this.slider_to(SliderId::Sv, ev.position, cx);
+                                        cx.stop_propagation();
+                                    }),
+                                )
                                 .child(
                                     canvas(
                                         move |b, _, cx| {
@@ -748,9 +810,15 @@ impl Editor {
                                             )));
                                             let cx_ = b.origin.x + b.size.width * s;
                                             let cy_ = b.origin.y + b.size.height * (1.0 - v);
-                                            let ring = Bounds::new(point(cx_ - px(6.0), cy_ - px(6.0)), size(px(12.0), px(12.0)));
+                                            let ring = Bounds::new(
+                                                point(cx_ - px(6.0), cy_ - px(6.0)),
+                                                size(px(12.0), px(12.0)),
+                                            );
                                             window.paint_quad(
-                                                PaintQuad::new(ring).corner_radii(px(6.0)).border_widths(px(2.0)).border_color(gpui::rgb(0xffffff)),
+                                                PaintQuad::new(ring)
+                                                    .corner_radii(px(6.0))
+                                                    .border_widths(px(2.0))
+                                                    .border_color(gpui::rgb(0xffffff)),
                                             );
                                         },
                                     )
@@ -766,11 +834,14 @@ impl Editor {
                                 .rounded(px(7.0))
                                 .overflow_hidden()
                                 .cursor_pointer()
-                                .on_mouse_down(MouseButton::Left, cx.listener(|this, ev: &MouseDownEvent, _, cx| {
-                                    this.drag = Some(super::stage::Drag::Slider(SliderId::Hue));
-                                    this.slider_to(SliderId::Hue, ev.position, cx);
-                                    cx.stop_propagation();
-                                }))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, ev: &MouseDownEvent, _, cx| {
+                                        this.drag = Some(super::stage::Drag::Slider(SliderId::Hue));
+                                        this.slider_to(SliderId::Hue, ev.position, cx);
+                                        cx.stop_propagation();
+                                    }),
+                                )
                                 .child(
                                     canvas(
                                         move |b, _, cx| {
@@ -783,17 +854,29 @@ impl Editor {
                                             for i in 0..6 {
                                                 let a = hsv_to_rgb(i as f32 * 60.0, 1.0, 1.0);
                                                 let c = hsv_to_rgb((i + 1) as f32 * 60.0, 1.0, 1.0);
-                                                let sb = Bounds::new(point(b.origin.x + seg * i as f32, b.origin.y), size(seg + px(0.5), b.size.height));
-                                                window.paint_quad(PaintQuad::new(sb).background(gpui::linear_gradient(
-                                                    90.0,
-                                                    gpui::linear_color_stop(theme::from_rgb(a), 0.0),
-                                                    gpui::linear_color_stop(theme::from_rgb(c), 1.0),
-                                                ).color_space(gpui::ColorSpace::Srgb)));
+                                                let sb = Bounds::new(
+                                                    point(b.origin.x + seg * i as f32, b.origin.y),
+                                                    size(seg + px(0.5), b.size.height),
+                                                );
+                                                window.paint_quad(
+                                                    PaintQuad::new(sb).background(
+                                                        gpui::linear_gradient(
+                                                            90.0,
+                                                            gpui::linear_color_stop(theme::from_rgb(a), 0.0),
+                                                            gpui::linear_color_stop(theme::from_rgb(c), 1.0),
+                                                        )
+                                                        .color_space(gpui::ColorSpace::Srgb),
+                                                    ),
+                                                );
                                             }
                                             let x = b.origin.x + px(7.0) + (b.size.width - px(14.0)) * (h / 360.0);
-                                            let knob = Bounds::new(point(x - px(7.0), b.origin.y), size(px(14.0), px(14.0)));
+                                            let knob =
+                                                Bounds::new(point(x - px(7.0), b.origin.y), size(px(14.0), px(14.0)));
                                             window.paint_quad(
-                                                PaintQuad::new(knob).corner_radii(px(7.0)).border_widths(px(2.0)).border_color(gpui::rgb(0xffffff)),
+                                                PaintQuad::new(knob)
+                                                    .corner_radii(px(7.0))
+                                                    .border_widths(px(2.0))
+                                                    .border_color(gpui::rgb(0xffffff)),
                                             );
                                         },
                                     )
@@ -805,16 +888,22 @@ impl Editor {
                                 .flex()
                                 .items_center()
                                 .gap(px(8.0))
-                                .child(div().size(px(29.0)).flex_none().rounded(px(7.0)).border_1().border_color(theme.border).bg(theme::from_rgb(current)))
+                                .child(
+                                    div()
+                                        .size(px(29.0))
+                                        .flex_none()
+                                        .rounded(px(7.0))
+                                        .border_1()
+                                        .border_color(theme.border)
+                                        .bg(theme::from_rgb(current)),
+                                )
                                 .child(
                                     div()
                                         .flex_1()
                                         .flex()
-                                        .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
-                                            if ev.keystroke.key == "enter" {
-                                                this.commit_hex(cx);
-                                                cx.stop_propagation();
-                                            }
+                                        .capture_action(cx.listener(|this, _: &Enter, _, cx| {
+                                            this.commit_hex(cx);
+                                            cx.stop_propagation();
                                         }))
                                         .child(field("pick-hex", &self.inputs.hex, "#RRGGBB", theme)),
                                 ),

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=escribo
+GenericName=Screenshot Annotator
+Comment=Annotate screenshots with arrows, boxes, highlights and text
+Exec=escribo %F
+Icon=com.escriboapp.escribo
+Terminal=false
+Categories=Graphics;2DGraphics;RasterGraphics;
+MimeType=image/png;image/jpeg;image/gif;image/webp;image/bmp;image/svg+xml;
+Keywords=screenshot;annotate;arrow;markup;redact;highlight;skitch;
+StartupNotify=true
+StartupWMClass=com.escriboapp.escribo

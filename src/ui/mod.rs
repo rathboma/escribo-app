@@ -4,12 +4,13 @@
 mod chrome;
 mod popovers;
 mod prefs;
+pub mod prompt;
 mod stage;
 mod widgets;
 
 pub use stage::StageGeom;
 
-use crate::app::{self, Shared, SettingsModel, Source};
+use crate::app::{self, SettingsModel, Shared, Source};
 use crate::doc::{Document, Id, Rgb, Shape, Tool, rgb};
 use crate::geom::{Rect, V2, v2};
 use crate::render;
@@ -277,7 +278,12 @@ impl Editor {
         let s = self.s(cx).clone();
         let known = settings::FONTS.iter().any(|f| f.id == s.kit().font);
         let focused = self.focused_field;
-        set_input_unless_focused(&self.inputs.font, if known { "" } else { &s.kit().font }, focused == Some(Field::Font), cx);
+        set_input_unless_focused(
+            &self.inputs.font,
+            if known { "" } else { &s.kit().font },
+            focused == Some(Field::Font),
+            cx,
+        );
         set_input_unless_focused(&self.inputs.wm_text, &s.kit().wm_text, focused == Some(Field::WmText), cx);
         let w = self.doc.as_ref().map(|d| {
             let l = render::layout_for(&s, &d.shot);
@@ -678,13 +684,17 @@ impl Editor {
                 Err(err) => Err(err),
             };
             let result = match png {
-                Ok(png) => app::save_with_dialog(cx, app::pictures_dir(), name, png).await,
+                Ok(png) => app::save_or_fallback(cx, app::pictures_dir(), name, png).await,
                 Err(err) => Err(err),
             };
             this.update(cx, |this, cx| match result {
-                Ok(Some(_)) => {
+                Ok(Some((path, dialog))) => {
                     this.flash(FlashTarget::Save, "Saved", cx);
-                    this.show_toast("Saved", cx);
+                    if dialog {
+                        this.show_toast("Saved", cx);
+                    } else {
+                        this.show_toast(format!("Saved to {}", app::tilde(&path)), cx);
+                    }
                 }
                 Ok(None) => {}
                 Err(err) => {
@@ -864,7 +874,11 @@ impl Render for Editor {
             }))
             .on_mouse_move_all({
                 let listener = cx.listener(Self::on_pointer_move);
-                move |ev: &gpui::MouseMoveEvent, phase: gpui::DispatchPhase, _: &gpui::Hitbox, window: &mut Window, cx: &mut App| {
+                move |ev: &gpui::MouseMoveEvent,
+                      phase: gpui::DispatchPhase,
+                      _: &gpui::Hitbox,
+                      window: &mut Window,
+                      cx: &mut App| {
                     if phase == gpui::DispatchPhase::Bubble {
                         listener(ev, window, cx)
                     }

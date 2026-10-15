@@ -29,12 +29,40 @@ fn main() -> anyhow::Result<()> {
     };
     let u = shot.unit();
     let mut doc = Document::new(shot, "sample.png".into());
-    doc.add(Shape::Mark(BoxShape { frame: OrientedBox { center: v2(300.0, 150.0), w: 360.0, h: 70.0, angle: 0.0 }, color: rgb("#FFB300"), stroke: 0.0, radius: 2.0 * u, alpha: 0.33 }));
-    doc.add(Shape::Rect(BoxShape { frame: OrientedBox { center: v2(800.0, 300.0), w: 300.0, h: 180.0, angle: 0.2 }, color: BRAND, stroke: 5.0 * u, radius: 2.0 * u, alpha: 1.0 }));
+    doc.add(Shape::Mark(BoxShape {
+        frame: OrientedBox { center: v2(300.0, 150.0), w: 360.0, h: 70.0, angle: 0.0 },
+        color: rgb("#FFB300"),
+        stroke: 0.0,
+        radius: 2.0 * u,
+        alpha: 0.33,
+    }));
+    doc.add(Shape::Rect(BoxShape {
+        frame: OrientedBox { center: v2(800.0, 300.0), w: 300.0, h: 180.0, angle: 0.2 },
+        color: BRAND,
+        stroke: 5.0 * u,
+        radius: 2.0 * u,
+        alpha: 1.0,
+    }));
     doc.add(Shape::Arrow(Arrow { tail: v2(200.0, 500.0), head: v2(620.0, 330.0), unit: u, color: BRAND }));
     doc.add(Shape::Redact(Rect::new(100.0, 250.0, 260.0, 60.0)));
-    doc.add(Shape::Text(Label { origin: v2(90.0, 560.0), angle: -0.05, scale: 1.0, width: 250.0 * u, font_size: 22.0 * u, unit: u, color: BRAND, font: "system".into(), text: "Look here 🔥 this label wraps nicely".into() }));
-    doc.add(Shape::Emoji(Emoji { center: v2(1050.0, 120.0), angle: 0.3, scale: 1.0, size: 100.0 * u, ch: "🚀".into() }));
+    doc.add(Shape::Text(Label {
+        origin: v2(90.0, 560.0),
+        angle: -0.05,
+        scale: 1.0,
+        width: 250.0 * u,
+        font_size: 22.0 * u,
+        unit: u,
+        color: BRAND,
+        font: "system".into(),
+        text: "Look here 🔥 this label wraps nicely".into(),
+    }));
+    doc.add(Shape::Emoji(Emoji {
+        center: v2(1050.0, 120.0),
+        angle: 0.3,
+        scale: 1.0,
+        size: 100.0 * u,
+        ch: "🚀".into(),
+    }));
     let mut s = Settings::from_value(&serde_json::Value::Null);
     s.style.pad = 6;
     s.style.backdrop = 6;

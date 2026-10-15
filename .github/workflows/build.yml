@@ -1,8 +1,8 @@
 name: Build [non production]
 
-# Sanity check on every PR and every push to master: the Linux app still
-# builds, and the (currently empty) test suite still passes. This never
-# publishes anything - it just proves the tree is releasable.
+# Sanity check on every PR and every push to master: the tests pass and the
+# Linux app still builds and packages. This never publishes anything - it just
+# proves the tree is releasable.
 
 permissions:
   contents: read
@@ -25,29 +25,33 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v5
 
-      - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: '.nvmrc'
-          cache: yarn
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential pkg-config libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb-randr0-dev libxcb-xinput-dev libfontconfig-dev libglib2.0-dev \
+            libegl1-mesa-dev libgles2-mesa-dev fonts-noto-color-emoji \
+            rpm flatpak flatpak-builder
+          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile --network-timeout 100000
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --check
 
       - name: Run tests
-        run: yarn test
-
-      # rpm packaging needs the rpmbuild tooling on the runner, and the flatpak
-      # target needs flatpak-builder plus the flathub remote for its runtimes.
-      - name: Install Linux packaging tooling
-        run: |
-          sudo apt-get update && sudo apt-get install -y rpm flatpak flatpak-builder
-          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+        run: cargo test --locked
 
       # x64 only - this job just proves the build works. The release workflow
       # builds arm64 natively on an arm runner.
-      - name: Build Linux app
-        run: yarn build --linux --x64 --publish never
+      - name: Build & package Linux app
+        run: bin/package-linux.sh
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6

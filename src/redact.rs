@@ -129,7 +129,9 @@ mod tests {
     fn noise_matches_the_javascript_hash() {
         // Values produced by the old redact.js noise() for the same inputs, so
         // a shot scrambles exactly as it did in the Electron app.
-        for (args, want) in [((0, 0, 0), 0.503371878877136), ((3, 7, 2), 0.20248907646222247), ((120, 45, 3), 0.8761379634673097)] {
+        for (args, want) in
+            [((0, 0, 0), 0.503371878877136), ((3, 7, 2), 0.20248907646222247), ((120, 45, 3), 0.8761379634673097)]
+        {
             let got = noise(args.0, args.1, args.2);
             assert!((got as f64 - want).abs() < 1e-6, "{args:?}: {got} != {want}");
         }

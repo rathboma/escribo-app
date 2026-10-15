@@ -299,7 +299,12 @@ impl TextEngine {
                 };
                 let font_id = font.data.id();
                 for g in run.positioned_glyphs() {
-                    let key = GlyphKey { font: font_id, index: font.index, glyph: g.id, size_bits: (size * dev_scale).to_bits() };
+                    let key = GlyphKey {
+                        font: font_id,
+                        index: font.index,
+                        glyph: g.id,
+                        size_bits: (size * dev_scale).to_bits(),
+                    };
                     let at = v2(g.x, g.y);
                     if let Some(img) = self.color_glyph(font_ref, &coords, key, size * dev_scale) {
                         out.push(Placed::Color(img, at));
@@ -423,9 +428,7 @@ fn stroke(width: f32) -> Stroke {
 /// draw it back down through `t`.
 fn draw_color_glyph(target: &mut Pixmap, g: &ColorGlyph, at: V2, t: Affine, dev_scale: f32) {
     let inv = 1.0 / dev_scale;
-    let gt = Affine::scale(inv, inv)
-        .then(Affine::translate(at + v2(g.left * inv, -g.top * inv)))
-        .then(t);
+    let gt = Affine::scale(inv, inv).then(Affine::translate(at + v2(g.left * inv, -g.top * inv))).then(t);
     let paint = PixmapPaint { quality: tiny_skia::FilterQuality::Bicubic, ..Default::default() };
     target.draw_pixmap(0, 0, g.pixmap.as_ref(), &paint, gt.to_skia(), None);
 }
@@ -557,11 +560,8 @@ mod tests {
         assert!(size.x > 50.0 && size.y > 50.0, "{size:?}");
         let mut pm = Pixmap::new(120, 120).unwrap();
         t.draw_emoji(&mut pm, &e, Affine::IDENTITY);
-        let colourful = pm
-            .pixels()
-            .iter()
-            .filter(|p| p.alpha() > 200 && (p.red() as i32 - p.green() as i32).abs() > 60)
-            .count();
+        let colourful =
+            pm.pixels().iter().filter(|p| p.alpha() > 200 && (p.red() as i32 - p.green() as i32).abs() > 60).count();
         assert!(colourful > 200, "emoji drawn in colour: {colourful}");
     }
 
@@ -580,4 +580,3 @@ mod tests {
         assert!(w > 10.0 && w < 80.0, "{w}");
     }
 }
-

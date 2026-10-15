@@ -84,8 +84,8 @@ pub const EMOJIS: [&str; 16] =
     ["🔥", "👍", "👎", "🎉", "⚠️", "✅", "❌", "💡", "🤔", "😍", "😭", "💀", "🚀", "⭐", "🙈", "🫠"];
 
 /* ==========================================================================
-   Colour
-   ========================================================================== */
+Colour
+========================================================================== */
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct Rgb {
@@ -128,8 +128,8 @@ pub fn rgb(hex: &str) -> Rgb {
 pub const BRAND: Rgb = Rgb::new(0xFF, 0x00, 0x7F);
 
 /* ==========================================================================
-   Annotations
-   ========================================================================== */
+Annotations
+========================================================================== */
 
 /// A rectangle-like annotation (box or highlight): a frame that may be
 /// rotated, a colour, and the style it was drawn with.
@@ -508,8 +508,8 @@ fn uniform_ratio(fixed: V2, corner: V2, p: V2) -> f32 {
 }
 
 /* ==========================================================================
-   Layout — the output box (ratio + padding) with the shot fitted inside
-   ========================================================================== */
+Layout — the output box (ratio + padding) with the shot fitted inside
+========================================================================== */
 
 /// Geometry of the composed output at 1×, in image pixels: the box, its
 /// padding, and where the shot sits in it. "Orig" wraps the screenshot in a
@@ -547,14 +547,14 @@ pub fn natural_layout(img_w: f64, img_h: f64, pad_pct: u32, ratio: Option<f64>) 
 }
 
 /* ==========================================================================
-   The screenshot
-   ========================================================================== */
+The screenshot
+========================================================================== */
 
 /// The decoded screenshot, straight-alpha RGBA.
 pub struct Shot {
     pub width: u32,
     pub height: u32,
-    pub rgba: Vec<u8>,
+    pub rgba: Arc<Vec<u8>>,
     pub has_alpha: bool,
     plate: std::sync::OnceLock<Option<crate::redact::Plate>>,
 }
@@ -562,7 +562,7 @@ pub struct Shot {
 impl Shot {
     pub fn new(width: u32, height: u32, rgba: Vec<u8>) -> Self {
         let has_alpha = rgba.chunks_exact(4).any(|p| p[3] != 255);
-        Self { width, height, rgba, has_alpha, plate: std::sync::OnceLock::new() }
+        Self { width, height, rgba: Arc::new(rgba), has_alpha, plate: std::sync::OnceLock::new() }
     }
 
     /// One "unit" is a pixel as it would look on a 900px-wide render, so
@@ -590,8 +590,8 @@ impl Shot {
 }
 
 /* ==========================================================================
-   Document & history
-   ========================================================================== */
+Document & history
+========================================================================== */
 
 pub struct Document {
     pub shot: Arc<Shot>,
@@ -796,7 +796,14 @@ mod tests {
         let f = start.frame(&mut Fixed);
         let fixed = f.corners()[0];
         let mut s = start.clone();
-        s.drag_handle(&start, f, Handle::Corner(2), f.corners()[2] + v2(10.0, 5.0), DragModifiers::default(), &mut Fixed);
+        s.drag_handle(
+            &start,
+            f,
+            Handle::Corner(2),
+            f.corners()[2] + v2(10.0, 5.0),
+            DragModifiers::default(),
+            &mut Fixed,
+        );
         let nf = s.frame(&mut Fixed);
         assert!((nf.corners()[0] - fixed).len() < 1e-3);
     }
@@ -817,7 +824,14 @@ mod tests {
         let start = Shape::Text(l);
         let f = start.frame(&mut Fixed);
         let mut s = start.clone();
-        s.drag_handle(&start, f, Handle::Corner(2), f.corners()[2] + (f.corners()[2] - f.corners()[0]), DragModifiers::default(), &mut Fixed);
+        s.drag_handle(
+            &start,
+            f,
+            Handle::Corner(2),
+            f.corners()[2] + (f.corners()[2] - f.corners()[0]),
+            DragModifiers::default(),
+            &mut Fixed,
+        );
         let Shape::Text(l) = &s else { unreachable!() };
         assert!((l.scale - 2.0).abs() < 1e-4);
         assert!(l.origin.len() < 1e-3);

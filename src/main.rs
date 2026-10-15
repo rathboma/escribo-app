@@ -18,6 +18,7 @@ window. A second launch hands its files to the escribo already running.
 
   -h, --help       show this help
   -V, --version    show the version
+      --quit       quit the escribo that is running
 ";
 
 fn main() {
@@ -38,6 +39,11 @@ fn main() {
                 println!("escribo {}", env!("CARGO_PKG_VERSION"));
                 return;
             }
+            Some("--quit") => {
+                #[cfg(target_os = "linux")]
+                escribo::linux::quit_running();
+                return;
+            }
             Some(s) if s.starts_with('-') => {}
             _ => files.push(PathBuf::from(arg)),
         }
@@ -48,28 +54,26 @@ fn main() {
         return;
     }
 
-    gpui_platform::application()
-        .with_assets(Assets)
-        .with_quit_mode(QuitMode::Explicit)
-        .run(move |cx: &mut App| {
-            cx.set_app_identity(app::APP_ID, "escribo");
-            if let Err(err) = cx.text_system().add_fonts(vec![Cow::Borrowed(COOKIE_TTF)]) {
-                log::warn!("could not load the Cookie font: {err:#}");
-            }
-            cx.bind_keys(default_bindings().as_keybindings(Some(DEFAULT_INPUT_CONTEXT)));
-            Shared::init(cx);
-            start_services(cx);
+    gpui_platform::application().with_assets(Assets).with_quit_mode(QuitMode::Explicit).run(move |cx: &mut App| {
+        cx.set_app_identity(app::APP_ID, "escribo");
+        if let Err(err) = cx.text_system().add_fonts(vec![Cow::Borrowed(COOKIE_TTF)]) {
+            log::warn!("could not load the Cookie font: {err:#}");
+        }
+        cx.bind_keys(default_bindings().as_keybindings(Some(DEFAULT_INPUT_CONTEXT)));
+        cx.set_prompt_builder(escribo::ui::prompt::build);
+        Shared::init(cx);
+        start_services(cx);
 
-            // Start with a window: the files asked for, or a blank one whose
-            // drop area and file picker are the way in.
-            if files.is_empty() {
-                app::open_window(Source::Empty, cx);
-            }
-            for f in files.drain(..) {
-                app::open_window(Source::Path(f), cx);
-            }
-            cx.activate(true);
-        });
+        // Start with a window: the files asked for, or a blank one whose
+        // drop area and file picker are the way in.
+        if files.is_empty() {
+            app::open_window(Source::Empty, cx);
+        }
+        for f in files.drain(..) {
+            app::open_window(Source::Path(f), cx);
+        }
+        cx.activate(true);
+    });
 }
 
 #[cfg(target_os = "linux")]
@@ -83,35 +87,34 @@ fn start_services(cx: &mut App) {
 
     cx.spawn(async move |cx| {
         while let Ok(cmd) = rx.recv().await {
-            let quit = cx
-                .update(|cx| {
-                    match cmd {
-                        Command::NewWindow => {
-                            app::open_window(Source::Empty, cx);
-                        }
-                        Command::Open(path) => {
-                            app::open_window(Source::Path(path), cx);
-                        }
-                        Command::Paste => {
-                            app::open_window(Source::Clipboard, cx);
-                        }
-                        Command::ChooseFile => {
-                            if let Some(handle) = app::open_window(Source::Empty, cx) {
-                                handle.update(cx, |editor, window, cx| editor.choose_file(window, cx)).ok();
-                            }
-                        }
-                        Command::UpdateReady(version) => {
-                            cx.show_system_notification(gpui::SystemNotification {
-                                tag: "update".into(),
-                                title: format!("escribo {version} is ready").into(),
-                                body: "It will be used the next time escribo starts.".into(),
-                                actions: Vec::new(),
-                            });
-                        }
-                        Command::Quit => return true,
+            let quit = cx.update(|cx| {
+                match cmd {
+                    Command::NewWindow => {
+                        app::open_window(Source::Empty, cx);
                     }
-                    false
-                });
+                    Command::Open(path) => {
+                        app::open_window(Source::Path(path), cx);
+                    }
+                    Command::Paste => {
+                        app::open_window(Source::Clipboard, cx);
+                    }
+                    Command::ChooseFile => {
+                        if let Some(handle) = app::open_window(Source::Empty, cx) {
+                            handle.update(cx, |editor, window, cx| editor.choose_file(window, cx)).ok();
+                        }
+                    }
+                    Command::UpdateReady(version) => {
+                        cx.show_system_notification(gpui::SystemNotification {
+                            tag: "update".into(),
+                            title: format!("escribo {version} is ready").into(),
+                            body: "It will be used the next time escribo starts.".into(),
+                            actions: Vec::new(),
+                        });
+                    }
+                    Command::Quit => return true,
+                }
+                false
+            });
             if quit {
                 cx.update(|cx| {
                     Shared::get(cx).settings.clone().update(cx, |m, _| m.flush());

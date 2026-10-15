@@ -7,8 +7,8 @@ use crate::text::TextEngine;
 use crate::ui::Editor;
 use anyhow::{Context as _, Result, anyhow};
 use gpui::{
-    App, AppContext as _, Bounds, ClipboardEntry, Context, Entity, Global,
-    Size, Task, TitlebarOptions, WindowBounds, WindowDecorations, WindowHandle, WindowOptions, point, px, size,
+    App, AppContext as _, Bounds, ClipboardEntry, Context, Entity, Global, Size, Task, TitlebarOptions, WindowBounds,
+    WindowDecorations, WindowHandle, WindowOptions, point, px, size,
 };
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -16,7 +16,8 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-pub const APP_ID: &str = "escribo";
+/// The desktop file, icon and Wayland app id all go by this name.
+pub const APP_ID: &str = "com.escriboapp.escribo";
 
 /// Settings shared by every window. Any change notifies every editor and is
 /// written to disk shortly after — a slider drag saves once, not per pixel.
@@ -110,9 +111,7 @@ pub fn open_window(source: Source, cx: &mut App) -> Option<WindowHandle<Editor>>
         })
         .map_err(|err| log::error!("could not open a window: {err:#}"))
         .ok()?;
-    handle
-        .update(cx, |_, window, _| window.activate())
-        .ok();
+    handle.update(cx, |_, window, _| window.activate()).ok();
     Some(handle)
 }
 
@@ -127,8 +126,8 @@ fn window_icon() -> Option<Arc<image::RgbaImage>> {
 }
 
 /* ==========================================================================
-   Images in
-   ========================================================================== */
+Images in
+========================================================================== */
 
 /// Decodes any image escribo opens: PNG, JPEG, GIF (first frame), WebP, BMP
 /// and SVG (rasterised at its natural size).
@@ -183,7 +182,9 @@ pub fn clipboard_image(cx: &App) -> Option<ClipboardImage> {
     let item = cx.read_from_clipboard()?;
     for entry in item.entries() {
         match entry {
-            ClipboardEntry::Image(img) if !img.bytes.is_empty() => return Some(ClipboardImage::Bytes(img.bytes.clone())),
+            ClipboardEntry::Image(img) if !img.bytes.is_empty() => {
+                return Some(ClipboardImage::Bytes(img.bytes.clone()));
+            }
             ClipboardEntry::ExternalPaths(paths) => {
                 if let Some(p) = paths.paths().iter().find(|p| is_image_path(p)) {
                     return Some(ClipboardImage::File(p.clone()));
@@ -209,8 +210,8 @@ pub fn is_image_path(p: &Path) -> bool {
 }
 
 /* ==========================================================================
-   Images out
-   ========================================================================== */
+Images out
+========================================================================== */
 
 /// Puts an image (straight RGBA) on the clipboard. gpui-ce's Linux backends
 /// only write text, so images go through wl-copy on Wayland — which works on
@@ -265,29 +266,72 @@ fn wl_copy(png: &[u8]) -> Result<()> {
     Ok(())
 }
 
+fn home() -> PathBuf {
+    dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// `~/Pictures`, or wherever the XDG user dirs put it — as Electron's
+/// `app.getPath('pictures')` resolved it.
 pub fn pictures_dir() -> PathBuf {
-    dirs::picture_dir().or_else(dirs::home_dir).unwrap_or_else(|| PathBuf::from("."))
+    dirs::picture_dir().unwrap_or_else(|| home().join("Pictures"))
 }
 
 pub fn documents_dir() -> PathBuf {
-    dirs::document_dir().or_else(dirs::home_dir).unwrap_or_else(|| PathBuf::from("."))
+    dirs::document_dir().unwrap_or_else(|| home().join("Documents"))
 }
 
-/// Saves `bytes` through the system's save dialog, suggesting `name` in
-/// `dir`. Ok(None) when the dialog was cancelled.
-pub async fn save_with_dialog(
+/// Saves through the dialog; where there is no dialog to show (no
+/// xdg-desktop-portal on this desktop) the file goes straight into `dir`
+/// under a name that does not clobber anything. Returns the path and whether
+/// the dialog was used, or None when it was cancelled.
+pub async fn save_or_fallback(
     cx: &mut gpui::AsyncApp,
     dir: PathBuf,
     name: String,
     bytes: Vec<u8>,
-) -> Result<Option<PathBuf>> {
+) -> Result<Option<(PathBuf, bool)>> {
     let rx = cx.update(|cx| cx.prompt_for_new_path(&dir, Some(&name)));
-    let Some(path) = rx.await.map_err(|_| anyhow!("dialog closed"))?? else {
-        return Ok(None);
+    match rx.await.map_err(|_| anyhow!("dialog closed")).and_then(|r| r) {
+        Ok(Some(path)) => {
+            let write_path = path.clone();
+            cx.background_executor().spawn(async move { std::fs::write(&write_path, bytes) }).await?;
+            Ok(Some((path, true)))
+        }
+        Ok(None) => Ok(None),
+        Err(err) => {
+            log::warn!("no save dialog ({err:#}); saving into {}", dir.display());
+            let path = unique_path(&dir, &name);
+            let write_path = path.clone();
+            cx.background_executor()
+                .spawn(async move {
+                    std::fs::create_dir_all(write_path.parent().unwrap_or(Path::new(".")))?;
+                    std::fs::write(&write_path, bytes)
+                })
+                .await?;
+            Ok(Some((path, false)))
+        }
+    }
+}
+
+/// `dir/name`, or `dir/stem (2).ext` and so on if that is taken.
+pub fn unique_path(dir: &Path, name: &str) -> PathBuf {
+    let first = dir.join(name);
+    if !first.exists() {
+        return first;
+    }
+    let (stem, ext) = match name.rfind('.') {
+        Some(i) if i > 0 => (&name[..i], &name[i..]),
+        _ => (name, ""),
     };
-    let write_path = path.clone();
-    cx.background_executor().spawn(async move { std::fs::write(&write_path, bytes) }).await?;
-    Ok(Some(path))
+    (2..).map(|n| dir.join(format!("{stem} ({n}){ext}"))).find(|p| !p.exists()).unwrap_or(first)
+}
+
+/// A path for display, with the home directory as `~`.
+pub fn tilde(p: &Path) -> String {
+    match dirs::home_dir().and_then(|h| p.strip_prefix(h).ok().map(Path::to_path_buf)) {
+        Some(rest) => format!("~/{}", rest.display()),
+        None => p.display().to_string(),
+    }
 }
 
 /// Asks for one file to open. Ok(None) when cancelled.

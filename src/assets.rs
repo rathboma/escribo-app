@@ -54,17 +54,11 @@ pub fn icon_path(name: &str) -> SharedString {
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> anyhow::Result<Option<Cow<'static, [u8]>>> {
         let name = path.strip_prefix("icons/").and_then(|p| p.strip_suffix(".svg"));
-        Ok(name
-            .and_then(|n| ICONS.iter().find(|(k, _)| *k == n))
-            .map(|(_, svg)| Cow::Borrowed(svg.as_bytes())))
+        Ok(name.and_then(|n| ICONS.iter().find(|(k, _)| *k == n)).map(|(_, svg)| Cow::Borrowed(svg.as_bytes())))
     }
 
     fn list(&self, path: &str) -> anyhow::Result<Vec<SharedString>> {
-        Ok(ICONS
-            .iter()
-            .map(|(k, _)| icon_path(k))
-            .filter(|p| p.starts_with(path))
-            .collect())
+        Ok(ICONS.iter().map(|(k, _)| icon_path(k)).filter(|p| p.starts_with(path)).collect())
     }
 }
 

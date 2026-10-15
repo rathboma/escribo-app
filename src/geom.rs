@@ -136,7 +136,10 @@ impl Rect {
     }
 
     pub fn union(&self, o: &Rect) -> Rect {
-        Rect::from_points(v2(self.x.min(o.x), self.y.min(o.y)), v2(self.right().max(o.right()), self.bottom().max(o.bottom())))
+        Rect::from_points(
+            v2(self.x.min(o.x), self.y.min(o.y)),
+            v2(self.right().max(o.right()), self.bottom().max(o.bottom())),
+        )
     }
 
     pub fn inflate(&self, d: f32) -> Rect {
