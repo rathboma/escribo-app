@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Cut a release: bump package.json, then push a git tag. Pushing the tag is what
-# triggers .github/workflows/publish.yml to build every platform and attach the
-# installers to a GitHub release. Publishing that release (a manual click in the
-# GitHub UI) then triggers release-published.yml to mirror the downloads to R2.
+# triggers .github/workflows/release.yml, which builds the installers, attaches
+# them to a GitHub release and publishes it - at which point the website's
+# download page serves them. There is no manual step after this script.
 
 set -euo pipefail
 
