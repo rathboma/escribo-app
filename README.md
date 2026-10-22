@@ -44,7 +44,7 @@ yarn install
 yarn dev        # same as `yarn start` — runs the app with electron
 ```
 
-The app lives in the system tray. It opens an annotation window automatically when a new screenshot lands in your `Pictures/Screenshots` folder, and the tray menu can also open a file or paste from the clipboard.
+The app lives in the system tray. The tray menu lists the five newest screenshots in your `Pictures/Screenshots` folder — click one to annotate it — and can also open a file or paste from the clipboard. By default a new screenshot also opens an annotation window on its own; untick **Open new screenshots automatically** in the tray menu to turn that off.
 
 ### Packaging
 

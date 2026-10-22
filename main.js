@@ -13,6 +13,13 @@ const watchedDir = path.join(app.getPath('pictures'), 'Screenshots');
 // Persistent settings live in a JSON file under userData, not in the
 // renderer's localStorage — which the OS is free to clear at any time.
 let store = null;
+// Settings the main process owns. Kept in their own file because the renderer
+// replaces the whole of `store` on every save.
+let appStore = null;
+
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.svg'];
+const RECENT_COUNT = 5;
+let recentScreenshots = [];
 
 // Read image content from the clipboard and create a file window.
 function getImageFromClipboard() {
@@ -103,14 +110,73 @@ function createFileWindow(filePath) {
 // Create a system tray icon with a context menu.
 function createTray() {
   tray = new Tray(path.join(__dirname, 'tray-icon.png')); // Ensure this file exists.
+  tray.setToolTip(APP_NAME);
+  updateTrayMenu();
+}
+
+// Rebuilt whenever the recent list or a setting changes — Linux only picks up
+// a new menu through setContextMenu, not by mutating the old one.
+function updateTrayMenu() {
+  if (!tray) return;
+  const recent = recentScreenshots.length
+    ? recentScreenshots.map((filePath) => ({
+      // Windows reads '&' as a mnemonic marker.
+      label: path.basename(filePath).replace(/&/g, '&&'),
+      click: () => { createFileWindow(filePath); }
+    }))
+    : [{ label: 'No screenshots yet', enabled: false }];
+
   const contextMenu = Menu.buildFromTemplate([
+    { label: 'Recent screenshots', enabled: false },
+    ...recent,
+    { type: 'separator' },
     { label: 'New window', click: () => { createFileWindow(); } },
     { label: 'Choose file', click: () => { triggerFromDialog(); } },
     { label: 'Paste from clipboard', click: () => { triggerFromClipboard(); } },
+    { type: 'separator' },
+    {
+      label: 'Open new screenshots automatically',
+      type: 'checkbox',
+      checked: appStore.get('openOnScreenshot'),
+      click: (item) => {
+        appStore.set('openOnScreenshot', item.checked);
+        updateTrayMenu();
+      }
+    },
+    { type: 'separator' },
     { label: 'Quit', click: () => { app.quit(); } }
   ]);
-  tray.setToolTip(APP_NAME);
   tray.setContextMenu(contextMenu);
+}
+
+function isImageFile(filename) {
+  return !filename.startsWith('.') &&
+    IMAGE_EXTENSIONS.includes(path.extname(filename).toLowerCase());
+}
+
+// The newest images in the screenshot folder, newest first.
+async function refreshRecentScreenshots() {
+  try {
+    const names = (await fs.promises.readdir(watchedDir)).filter(isImageFile);
+    const files = await Promise.all(names.map(async (name) => {
+      const filePath = path.join(watchedDir, name);
+      try {
+        const stat = await fs.promises.stat(filePath);
+        return stat.isFile() ? { filePath, mtime: stat.mtimeMs } : null;
+      } catch {
+        return null; // Removed between readdir and stat.
+      }
+    }));
+    recentScreenshots = files
+      .filter(Boolean)
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, RECENT_COUNT)
+      .map((f) => f.filePath);
+  } catch (error) {
+    console.error(`Could not list ${watchedDir}:`, error.message);
+    recentScreenshots = [];
+  }
+  updateTrayMenu();
 }
 
 function watchScreenshotDir() {
@@ -121,14 +187,22 @@ function watchScreenshotDir() {
     return;
   }
 
+  refreshRecentScreenshots();
+
+  // A single screenshot can fire several events while it is written.
+  let refreshTimer = null;
+
   try {
     fs.watch(watchedDir, (eventType, filename) => {
       if (eventType !== 'rename' || !filename) return;
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(refreshRecentScreenshots, 300);
+
       const filePath = path.join(watchedDir, filename);
       // 'rename' fires on both addition and removal — only react to additions.
-      if (fs.existsSync(filePath)) {
+      if (isImageFile(filename) && fs.existsSync(filePath)) {
         console.log(`New file detected: ${filePath}`);
-        createFileWindow(filePath);
+        if (appStore.get('openOnScreenshot')) createFileWindow(filePath);
       }
     });
   } catch (error) {
@@ -140,6 +214,7 @@ app.whenReady().then(async () => {
   // electron-store is ESM-only, so pull it in with a dynamic import.
   const { default: Store } = await import('electron-store');
   store = new Store({ name: 'settings' });
+  appStore = new Store({ name: 'app', defaults: { openOnScreenshot: true } });
 
   // The renderer keeps its settings load/save synchronous, so serve these
   // over the synchronous IPC channel.
@@ -255,7 +330,8 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  // Stay resident in the tray so the next screenshot can open a window.
+  // Stay resident in the tray so the next screenshot can open a window, or be
+  // picked from the tray's recent list.
 });
 
 app.on('activate', () => {
