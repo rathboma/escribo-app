@@ -65,7 +65,10 @@ apply live in [`build/`](build/README.md).
 Artifact names are pinned (`escribo-<version>-<os>-<arch>.<ext>`, and
 `-windows-installer` / `-windows-portable` for the two Windows targets) because
 the website resolves a download to a release asset by matching the end of its
-filename. Renaming a target here means editing the matching `suffix` in
+filename. `<arch>` is electron-builder's name for it in each format, not the
+`--x64` flag: the x64 AppImage is `escribo-1.2.3-linux-x86_64.AppImage`, and
+deb/rpm use `amd64`/`x86_64` and `arm64`/`aarch64`. Renaming a target here
+means editing the matching `suffix` in
 `_data/downloads.yml` in [rathboma/escribo-web](https://github.com/rathboma/escribo-web).
 
 ## Releasing
@@ -76,34 +79,46 @@ Cutting a release is one command:
 yarn release   # bin/make-release.sh: bumps package.json and pushes a v* tag
 ```
 
-Pushing the tag drives the CI pipeline (`.github/workflows/`):
+Pushing the tag drives **`release.yml`**, which takes it all the way to a
+public GitHub release with no manual step:
 
-1. **`publish.yml`** builds every platform (Linux x64/arm64, Windows, macOS
-   universal) and attaches the installers to a **draft** GitHub release.
-   Signing is wired but optional — builds succeed unsigned until the signing
-   secrets are added (see the step comments in `publish.yml`).
-2. Publishing that draft (a manual click in the GitHub UI) fires
-   **`release-published.yml`**, which:
-   - mirrors every asset to the R2 bucket under `releases/<tag>/` and refreshes
-     `latest.json` — the manifest the website resolves downloads from, served at
-     `download.escriboapp.com`;
-   - publishes the GPG-signed `.deb`/`.rpm` packages to the apt/dnf repos under
-     the `deb/` and `rpm/` prefixes of the same bucket, served at
-     `repo.escriboapp.com`, and uploads the public key to `escribo.key`.
+1. creates a draft release for the tag, with generated notes;
+2. builds the **Linux AppImage** for x86_64 and arm64 and attaches both, plus
+   the `latest-linux*.yml` update metadata;
+3. checks every download is there and publishes the release. A tag with a
+   suffix (`v1.2.3-beta.1`) publishes as a prerelease.
+
+The website's `/download` page reads the latest published release, so a
+version is downloadable the moment step 3 finishes. The tag has to match the
+`package.json` version — `yarn release` takes care of that — or the run stops
+before building anything.
+
+**Only the AppImage ships for now.** macOS and Windows come back in the
+`release.yml` matrix once signing and notarization are set up; their build
+steps are already wired and sign automatically when the secrets exist (see the
+step comments). deb, rpm and Flatpak still build locally and in `build.yml`,
+but are not released yet.
+
+`release-published.yml` mirrors a release to the R2 bucket
+(`download.escriboapp.com`) and publishes the GPG-signed `.deb`/`.rpm` packages
+to the apt/dnf repos at `repo.escriboapp.com`. It is manual-only for now — run
+it from the Actions tab once deb/rpm are released and its secrets exist.
 
 `build.yml` builds the Linux app and runs the tests on every PR and every push
-to `master`, purely as a check — it publishes nothing.
+to `main`, purely as a check — it publishes nothing.
 
 ### Auto-update
 
 The app updates itself where the OS/package manager can't: Windows, macOS and
 the Linux **AppImage** update in-app via `electron-updater` (`updater.js`),
-reading the metadata `publish.yml` attaches to each GitHub release. **deb/rpm**
+reading the metadata `release.yml` attaches to each GitHub release. **deb/rpm**
 installs update through `apt`/`dnf`: the `build/deb-postinstall` and
 `build/rpm-postinstall` scripts register the `repo.escriboapp.com` repo and its
 signing key at install time. macOS updates only apply once the app is signed.
 
 ### Deploy secrets
+
+`release.yml` needs nothing beyond the built-in `GITHUB_TOKEN`.
 
 `release-published.yml` needs:
 
@@ -115,7 +130,7 @@ signing key at install time. macOS updates only apply once the app is signed.
   before the first stable release** — the repo publish refuses to ship an
   unsigned repo, because installed packages pin `signed-by` / `gpgcheck=1`.
 
-Optional code-signing secrets (mac/win) are documented inline in `publish.yml`.
+Optional code-signing secrets (mac/win) are documented inline in `release.yml`.
 
 ## Contributing
 

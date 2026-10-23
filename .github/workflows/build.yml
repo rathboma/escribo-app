@@ -1,6 +1,6 @@
 name: Build [non production]
 
-# Sanity check on every PR and every push to master: the Linux app still
+# Sanity check on every PR and every push to main: the Linux app still
 # builds, and the (currently empty) test suite still passes. This never
 # publishes anything - it just proves the tree is releasable.
 
@@ -11,7 +11,7 @@ on:
   pull_request:
   push:
     branches:
-      - master
+      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
