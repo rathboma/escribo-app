@@ -6,6 +6,9 @@ runtime: org.freedesktop.Platform
 runtime-version: '26.08'
 sdk: org.freedesktop.Sdk
 command: escribo
+# The SDK no longer ships appstream-compose, which the flatpak-builder in
+# Ubuntu 22.04 (CI) still calls; the metainfo file is installed as it is.
+appstream-compose: false
 finish-args:
   - --socket=wayland
   - --socket=fallback-x11
