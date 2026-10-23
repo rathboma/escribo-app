@@ -6,7 +6,9 @@ use crate::app::is_image_path;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant, SystemTime};
 
 /// Something the app should do, from outside a window.
 #[derive(Debug, Clone, PartialEq)]
@@ -28,7 +30,12 @@ Tray
 struct Tray {
     tx: Sender,
     themed_icon: bool,
+    /// The newest images in the Screenshots folder, newest first.
+    recent: Vec<PathBuf>,
 }
+
+/// The running tray, so the folder watcher can refresh its recent list.
+static TRAY: OnceLock<ksni::Handle<Tray>> = OnceLock::new();
 
 /// The tray icon as pixmaps, at the sizes panels draw it, so the host picks
 /// one rather than shrinking a large one.
@@ -99,7 +106,7 @@ impl ksni::Tray for Tray {
     }
 
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
-        use ksni::menu::StandardItem;
+        use ksni::menu::{CheckmarkItem, StandardItem};
         let item = |label: &str, cmd: Command| -> ksni::MenuItem<Self> {
             StandardItem {
                 label: label.into(),
@@ -110,13 +117,40 @@ impl ksni::Tray for Tray {
             }
             .into()
         };
-        vec![
+        let heading = |label: &str| -> ksni::MenuItem<Self> {
+            StandardItem { label: label.into(), enabled: false, ..Default::default() }.into()
+        };
+
+        let mut menu = vec![heading("Recent screenshots")];
+        if self.recent.is_empty() {
+            menu.push(heading("No screenshots yet"));
+        }
+        for path in &self.recent {
+            let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            // A single underscore marks an access key in a tray menu label.
+            menu.push(item(&name.replace('_', "__"), Command::Open(path.clone())));
+        }
+        menu.extend([
+            ksni::MenuItem::Separator,
             item("New window", Command::NewWindow),
             item("Choose file", Command::ChooseFile),
             item("Paste from clipboard", Command::Paste),
             ksni::MenuItem::Separator,
+            CheckmarkItem {
+                label: "Open new screenshots automatically".into(),
+                checked: open_on_screenshot().load(Ordering::Relaxed),
+                activate: Box::new(|_: &mut Self| {
+                    let on = !open_on_screenshot().load(Ordering::Relaxed);
+                    open_on_screenshot().store(on, Ordering::Relaxed);
+                    save_open_on_screenshot(on);
+                }),
+                ..Default::default()
+            }
+            .into(),
+            ksni::MenuItem::Separator,
             item("Quit", Command::Quit),
-        ]
+        ]);
+        menu
     }
 }
 
@@ -128,10 +162,15 @@ pub fn start_tray(tx: Sender) {
         .name("tray".into())
         .spawn(move || {
             use ksni::TrayMethods;
-            match smol::block_on(Tray { tx, themed_icon: themed_icon_installed() }.spawn()) {
+            let tray =
+                Tray { tx, themed_icon: themed_icon_installed(), recent: recent_screenshots(&screenshots_dir()) };
+            match smol::block_on(tray.spawn()) {
                 Ok(handle) => {
-                    // The service runs on ksni's own thread; keep it alive.
-                    std::mem::forget(handle);
+                    // The service runs on ksni's own thread; the handle keeps
+                    // it alive, and lets the watcher update the menu.
+                    TRAY.set(handle).ok();
+                    // Catch anything saved while the tray was starting.
+                    refresh_tray();
                 }
                 Err(err) => log::warn!("no system tray available: {err}"),
             }
@@ -147,7 +186,37 @@ pub fn screenshots_dir() -> PathBuf {
     crate::app::pictures_dir().join("Screenshots")
 }
 
-/// Opens a window for every new image saved into `~/Pictures/Screenshots`.
+/// How many screenshots the tray lists.
+const RECENT_COUNT: usize = 5;
+
+/// The newest images in `dir`, newest first.
+fn recent_screenshots(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    let mut shots: Vec<(SystemTime, PathBuf)> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| is_candidate(path))
+        .filter_map(|path| {
+            // Removed since the listing, or not a file: skip it.
+            let meta = std::fs::metadata(&path).ok().filter(|m| m.is_file())?;
+            Some((meta.modified().ok()?, path))
+        })
+        .collect();
+    shots.sort_by(|a, b| b.0.cmp(&a.0));
+    shots.into_iter().take(RECENT_COUNT).map(|(_, path)| path).collect()
+}
+
+/// Re-reads the Screenshots folder into the tray's recent list.
+fn refresh_tray() {
+    if let Some(tray) = TRAY.get() {
+        let recent = recent_screenshots(&screenshots_dir());
+        smol::block_on(tray.update(|t| t.recent = recent));
+    }
+}
+
+/// Watches `~/Pictures/Screenshots`: keeps the tray's recent list current
+/// and, unless that's switched off in the tray, opens a window for every new
+/// image saved there.
 pub fn watch_screenshots(tx: Sender) {
     let dir = screenshots_dir();
     if let Err(err) = std::fs::create_dir_all(&dir) {
@@ -173,8 +242,24 @@ pub fn watch_screenshots(tx: Sender) {
                 log::warn!("could not watch {}: {err}", dir.display());
                 return;
             }
+            // One screenshot fires a burst of events as it's written; the
+            // recent list is re-read once the folder has been quiet a moment.
+            let (ping, pings) = std::sync::mpsc::channel::<()>();
+            std::thread::Builder::new()
+                .name("recent".into())
+                .spawn(move || {
+                    while pings.recv().is_ok() {
+                        while pings.recv_timeout(Duration::from_millis(300)).is_ok() {}
+                        refresh_tray();
+                    }
+                })
+                .ok();
+
             let mut recent: Vec<(PathBuf, Instant)> = Vec::new();
             for event in erx.into_iter().flatten() {
+                if !matches!(event.kind, EventKind::Access(_)) {
+                    ping.send(()).ok();
+                }
                 // Additions only: a new file, or one renamed into place (the
                 // way screenshot tools finish writing).
                 let added = matches!(
@@ -196,7 +281,7 @@ pub fn watch_screenshots(tx: Sender) {
                 recent.push((path.clone(), Instant::now()));
                 let tx = tx.clone();
                 std::thread::spawn(move || {
-                    if wait_until_written(&path) {
+                    if wait_until_written(&path) && open_on_screenshot().load(Ordering::Relaxed) {
                         log::info!("new screenshot: {}", path.display());
                         tx.send_blocking(Command::Open(path)).ok();
                     }
@@ -226,6 +311,53 @@ fn wait_until_written(path: &Path) -> bool {
         std::thread::sleep(Duration::from_millis(120));
     }
     last.is_some_and(|n| n > 0)
+}
+
+/* ==========================================================================
+Tray preferences
+========================================================================== */
+
+/// `app.json`, beside settings.json: preferences the tray owns. The Electron
+/// version kept them in the same file under the same keys, so a choice made
+/// there carries over.
+fn app_store_path() -> Option<PathBuf> {
+    crate::settings::Settings::path().map(|p| p.with_file_name("app.json"))
+}
+
+fn read_app_store() -> serde_json::Map<String, serde_json::Value> {
+    app_store_path()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|v| match v {
+            serde_json::Value::Object(map) => Some(map),
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
+/// Whether a new screenshot opens a window by itself. On unless switched off.
+fn open_on_screenshot() -> &'static AtomicBool {
+    static ON: OnceLock<AtomicBool> = OnceLock::new();
+    ON.get_or_init(|| {
+        AtomicBool::new(read_app_store().get("openOnScreenshot").and_then(|v| v.as_bool()).unwrap_or(true))
+    })
+}
+
+fn save_open_on_screenshot(on: bool) {
+    let Some(path) = app_store_path() else { return };
+    let mut store = read_app_store();
+    store.insert("openOnScreenshot".into(), on.into());
+    let write = || -> std::io::Result<()> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        let tmp = path.with_extension("json.tmp");
+        std::fs::write(&tmp, serde_json::to_string_pretty(&store).map_err(std::io::Error::other)?)?;
+        std::fs::rename(&tmp, &path)
+    };
+    if let Err(err) = write() {
+        log::warn!("could not save {}: {err}", path.display());
+    }
 }
 
 /* ==========================================================================
@@ -433,6 +565,24 @@ mod tests {
         assert_eq!(big.data[0], 0);
         let mid = ((64 * 128 + 20) * 4) as usize;
         assert_eq!(big.data[mid], 255);
+    }
+
+    #[test]
+    fn recent_screenshots_are_the_newest_images_first() {
+        let dir = std::env::temp_dir().join(format!("escribo-recent-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let base = SystemTime::now() - Duration::from_secs(3600);
+        let names = ["a.png", "b.jpg", "c.png", "d.webp", "e.png", "f.png", ".hidden.png", "notes.txt"];
+        for (i, name) in names.iter().enumerate() {
+            let file = std::fs::File::create(dir.join(name)).unwrap();
+            file.set_modified(base + Duration::from_secs(i as u64 * 60)).unwrap();
+        }
+        std::fs::create_dir_all(dir.join("folder.png")).unwrap();
+        let recent: Vec<String> =
+            recent_screenshots(&dir).iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(recent, ["f.png", "e.png", "d.webp", "c.png", "b.jpg"]);
+        assert!(recent_screenshots(Path::new("/nonexistent/escribo")).is_empty());
     }
 
     #[test]
