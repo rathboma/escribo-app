@@ -1,13 +1,15 @@
 #!/bin/bash
 # Packages the release build for Linux:
 #
-#   dist/escribo-<version>-linux-<arch>.AppImage
+#   dist/escribo-<version>-linux-<arch>.AppImage  (+ latest-linux*.yml)
 #   dist/escribo-<version>-linux-<arch>.deb
 #   dist/escribo-<version>-linux-<arch>.rpm
 #   dist/escribo-<version>-linux-<arch>.flatpak
 #
-# <arch> is x64 or arm64 — the names the website matches release assets by
-# (`suffix` in escribo-web's _data/downloads.yml), so keep them in step.
+# <arch> is x86_64 or arm64, as in every release since 1.0.0. The website
+# matches release assets by these names (`suffix` in escribo-web's
+# _data/downloads.yml), and the in-app updater and release.yml look for them
+# too, so change them together.
 #
 # Usage: bin/package-linux.sh [appimage] [deb] [rpm] [flatpak]   (default: all)
 # Env:   SKIP_BUILD=1  package target/release/escribo as it is
@@ -23,7 +25,7 @@ cd "$ROOT"
 APP_ID=com.escriboapp.escribo
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
 case "$(uname -m)" in
-  x86_64) ARCH=x64; DEB_ARCH=amd64; RPM_ARCH=x86_64; AI_ARCH=x86_64 ;;
+  x86_64) ARCH=x86_64; DEB_ARCH=amd64; RPM_ARCH=x86_64; AI_ARCH=x86_64 ;;
   aarch64|arm64) ARCH=arm64; DEB_ARCH=arm64; RPM_ARCH=aarch64; AI_ARCH=aarch64 ;;
   *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
@@ -148,6 +150,24 @@ if want appimage; then
   # FUSE is not needed to build: let appimagetool unpack itself.
   ARCH="$AI_ARCH" APPIMAGE_EXTRACT_AND_RUN=1 "$tool" --no-appstream "$appdir" "$DIST/$NAME.AppImage" >/dev/null
   rm -rf "$appdir"
+
+  # Update metadata in electron-builder's format, for AppImages of the
+  # Electron version (1.0.0): their electron-updater reads latest-linux.yml
+  # (x86_64) or latest-linux-arm64.yml from the latest release, and this is
+  # how they move to this one. escribo's own updater reads the release itself.
+  feed=latest-linux.yml
+  [ "$ARCH" = arm64 ] && feed=latest-linux-arm64.yml
+  sha512="$(openssl dgst -sha512 -binary "$DIST/$NAME.AppImage" | base64 -w0)"
+  cat > "$DIST/$feed" <<YML
+version: $VERSION
+files:
+  - url: $NAME.AppImage
+    sha512: $sha512
+    size: $(stat -c %s "$DIST/$NAME.AppImage")
+path: $NAME.AppImage
+sha512: $sha512
+releaseDate: '$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'
+YML
 fi
 
 # --- Flatpak -----------------------------------------------------------------
@@ -167,4 +187,4 @@ if want flatpak; then
 fi
 
 rm -rf "$STAGE"
-ls -la "$DIST"/"$NAME".* 2>/dev/null
+ls -la "$DIST"/"$NAME".* "$DIST"/latest-linux*.yml 2>/dev/null

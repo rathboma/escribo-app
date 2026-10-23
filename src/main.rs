@@ -22,6 +22,12 @@ window. A second launch hands its files to the escribo already running.
 ";
 
 fn main() {
+    // The Electron version's updater installs a new AppImage by running it
+    // with this set and waiting for it to exit; it is how 1.0.0 installs
+    // update to this one.
+    if std::env::var_os("APPIMAGE_EXIT_AFTER_INSTALL").is_some() {
+        return;
+    }
     if std::env::var_os("RUST_LOG").is_none() {
         // SAFETY: called before any other thread exists.
         unsafe { std::env::set_var("RUST_LOG", "warn") };

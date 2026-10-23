@@ -461,8 +461,9 @@ pub fn check_for_updates(tx: Sender) {
         .ok();
 }
 
+/// The architecture in release asset names, as bin/package-linux.sh writes it.
 fn arch_suffix() -> &'static str {
-    if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" }
+    if cfg!(target_arch = "aarch64") { "arm64" } else { "x86_64" }
 }
 
 fn agent() -> ureq::Agent {
