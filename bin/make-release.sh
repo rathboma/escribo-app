@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # Cut a release: bump Cargo.toml, then push a git tag. Pushing the tag is what
-# triggers .github/workflows/publish.yml to build the Linux packages and attach
-# them to a GitHub release. Publishing that release (a manual click in the
-# GitHub UI) then triggers release-published.yml to mirror the downloads to R2.
+# triggers .github/workflows/release.yml, which builds the AppImages, attaches
+# them to a GitHub release and publishes it - at which point the website's
+# download page and the in-app updaters serve them. There is no manual step
+# after this script.
 
 set -euo pipefail
 

@@ -1,6 +1,6 @@
 # escribo: An Open-Source Skitch Alternative
 
-escribo (formerly Pink Arrows) is a lightweight annotation tool for screenshots. The desktop app is native Rust on [gpui-ce](https://github.com/gpui-ce/gpui-ce) — a single small binary that starts instantly — and ships for Linux. The original browser version still runs at [pinkarrows.app](https://pinkarrows.app) with no installation required; its source lives in [`web/`](web/).
+escribo (formerly Pink Arrows) is a lightweight annotation tool for screenshots: a native desktop app written in Rust on [gpui-ce](https://github.com/gpui-ce/gpui-ce) — a single small binary that starts instantly. It ships for Linux.
 
 Everything runs locally — nothing is stored server-side.
 
@@ -20,11 +20,9 @@ I really loved Skitch. In fact, the pink Skitch arrows and dumbed-down text beca
 - **Profiles** — the global kit: annotation palette, padding fills, label font, watermark branding and advanced screenshot styling (corner rounding, drop shadow, annotation size), plus the presets built on it. Switch profiles in Preferences; import or export a profile (presets included) or a set of presets as JSON to share with your team
 - **Watermark tab** — swap the escribo mark for custom text and colours, or keep the default branding
 - **Advanced tab** — fine control over screenshot corner rounding, drop shadow and default annotation size, for teams who want more than the defaults
-- Light and dark themes, native window chrome on macOS, Windows and Linux
+- Light and dark themes, and a header bar that follows the desktop's window button layout, the way GNOME's own apps do
 
 ### Hotkeys
-
-On macOS, read `Ctrl` as `⌘`.
 
 | Key | Action | Key | Action |
 | --- | --- | --- | --- |
@@ -52,11 +50,11 @@ cargo run -- path/to/shot.png   # open an image
 cargo test
 ```
 
-The app lives in the system tray. It opens an annotation window automatically when a new screenshot lands in your `Pictures/Screenshots` folder, and the tray menu can also open a file or paste from the clipboard. Launching `escribo` again (from the app menu, or `escribo file.png` from a file manager) hands the request to the running instance; `escribo --quit` stops it.
+The app lives in the system tray. The tray menu lists the five newest screenshots in your `Pictures/Screenshots` folder — click one to annotate it — and can also open a file or paste from the clipboard. By default a new screenshot also opens an annotation window on its own; untick **Open new screenshots automatically** in the tray menu to turn that off. Launching `escribo` again (from the app menu, or `escribo file.png` from a file manager) hands the request to the running instance; `escribo --quit` stops it.
 
 The tray uses the StatusNotifierItem protocol: KDE, Xfce, Cinnamon and most others show it out of the box; stock GNOME needs the AppIndicator extension. Without a tray escribo still stays running, so screenshots keep opening windows. Copying images on Wayland uses `wl-copy` (from `wl-clipboard`) when it is installed.
 
-Settings live in `~/.config/escribo/settings.json` — the same file the Electron version wrote, so profiles and presets carry over.
+Settings live in `~/.config/escribo/settings.json`, and the tray's auto-open choice in `app.json` beside it — the same files the Electron version wrote, so profiles, presets and that choice carry over.
 
 ### Packaging
 
@@ -70,7 +68,7 @@ It needs `dpkg-deb`, `rpmbuild`, and `flatpak-builder` with the flathub remote; 
 
 | OS | Targets |
 | --- | --- |
-| Linux | AppImage, deb, rpm and Flatpak, each on x64 and arm64 |
+| Linux | AppImage, deb, rpm and Flatpak, each on x86_64 and arm64 |
 
 macOS and Windows builds are not wired up yet: gpui-ce supports both, so the
 app code is portable, but the tray, screenshot folder, clipboard and update
@@ -78,8 +76,11 @@ code in `src/linux.rs` has only a Linux implementation so far.
 
 Artifact names are pinned (`escribo-<version>-linux-<arch>.<ext>`) because
 the website resolves a download to a release asset by matching the end of its
-filename. Renaming one here means editing the matching `suffix` in
-`_data/downloads.yml` in [rathboma/escribo-web](https://github.com/rathboma/escribo-web).
+filename. `<arch>` is `x86_64` or `arm64` in every format, as it has been
+since 1.0.0 (`escribo-1.2.3-linux-x86_64.AppImage`). Renaming one here means
+editing the matching `suffix` in `_data/downloads.yml` in
+[rathboma/escribo-web](https://github.com/rathboma/escribo-web), and the names
+`release.yml` checks for.
 
 ## Releasing
 
@@ -89,35 +90,50 @@ Cutting a release is one command:
 bin/make-release.sh   # bumps Cargo.toml and pushes a v* tag
 ```
 
-Pushing the tag drives the CI pipeline (`.github/workflows/`):
+Pushing the tag drives **`release.yml`**, which takes it all the way to a
+public GitHub release with no manual step:
 
-1. **`publish.yml`** builds the Linux packages natively on x64 and arm64
-   runners and attaches them to a **draft** GitHub release. It refuses a tag
-   that does not match the version in `Cargo.toml`.
-2. Publishing that draft (a manual click in the GitHub UI) fires
-   **`release-published.yml`**, which:
-   - mirrors every asset to the R2 bucket under `releases/<tag>/` and refreshes
-     `latest.json` — the manifest the website resolves downloads from, served at
-     `download.escriboapp.com`;
-   - publishes the GPG-signed `.deb`/`.rpm` packages to the apt/dnf repos under
-     the `deb/` and `rpm/` prefixes of the same bucket, served at
-     `repo.escriboapp.com`, and uploads the public key to `escribo.key`.
+1. creates a draft release for the tag, with generated notes;
+2. builds the **Linux AppImage** natively on x86_64 and arm64 runners;
+3. attaches both, plus the `latest-linux*.yml` update metadata, checks every
+   download is there and publishes the release. A tag with a suffix
+   (`v1.2.3-beta.1`) publishes as a prerelease.
+
+The website's `/download` page reads the latest published release, so a
+version is downloadable the moment step 3 finishes. The tag has to match the
+`Cargo.toml` version — `bin/make-release.sh` takes care of that — or the run
+stops before building anything.
+
+**Only the AppImage ships for now.** deb, rpm and Flatpak build locally and in
+`build.yml`, but are not released yet.
+
+`release-published.yml` mirrors a release to the R2 bucket
+(`download.escriboapp.com`) and publishes the GPG-signed `.deb`/`.rpm` packages
+to the apt/dnf repos at `repo.escriboapp.com`. It is manual-only for now — run
+it from the Actions tab once deb/rpm are released and its secrets exist.
 
 `build.yml` checks formatting, runs the tests and builds every Linux package on
-every PR and every push to `master`, purely as a check — it publishes nothing.
+every PR and every push to `main`, purely as a check — it publishes nothing.
 
 ### Auto-update
 
 The **AppImage** updates itself: shortly after launch it checks the latest
 GitHub release, downloads the matching AppImage, verifies it against the
 SHA-256 digest GitHub publishes for the asset, and swaps it in place — the next
-launch runs the new version. **deb/rpm** installs update through `apt`/`dnf`:
-the `build/deb-postinstall` and `build/rpm-postinstall` scripts register the
-`repo.escriboapp.com` repo and its signing key at install time. The
-**Flatpak** updates with `flatpak update`. Set `ESCRIBO_NO_UPDATE=1` to skip
-the AppImage check.
+launch runs the new version. Set `ESCRIBO_NO_UPDATE=1` to skip the check.
+
+AppImages of the Electron version (1.0.0) update with `electron-updater`, which
+reads `latest-linux.yml` / `latest-linux-arm64.yml` from the latest release.
+`bin/package-linux.sh` writes those in the same format, so 1.0.0 installs move
+to the Rust app like any other update.
+
+**deb/rpm** installs update through `apt`/`dnf`: the `build/deb-postinstall`
+and `build/rpm-postinstall` scripts register the `repo.escriboapp.com` repo and
+its signing key at install time. The **Flatpak** updates with `flatpak update`.
 
 ### Deploy secrets
+
+`release.yml` needs nothing beyond the built-in `GITHUB_TOKEN`.
 
 `release-published.yml` needs:
 
@@ -144,9 +160,6 @@ If you'd like to contribute with code, clone the repository and see
 | `src/settings.rs` | settings, profiles and presets, and their import/export files |
 | `src/ui/` | the gpui window: stage, toolbar, popovers, preferences |
 | `src/linux.rs` | tray, Screenshots watcher, single instance, AppImage updates |
-| `web/` | the browser version served at pinkarrows.app |
-
-To work on the browser version, serve `web/` (`cd web && python3 -m http.server`) and open http://localhost:8000.
 
 ## Roadmap / feature requests
 - [ ] Hotkey tooltips

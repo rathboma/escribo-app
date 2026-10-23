@@ -1,16 +1,18 @@
 name: Release - Publish Downloads
 
-# Runs when a release is published (publish.yml only builds and attaches assets
-# to a *draft* release). Everything user-facing happens here, gated on the
-# manual publish click:
+# Manual only for now. release.yml publishes the release itself, with the
+# workflow's GITHUB_TOKEN, and GitHub never starts another workflow from an
+# event that token caused - so a `release: published` trigger here would never
+# fire. Run it from the Actions tab once the R2 and GPG secrets below exist and
+# deb/rpm are back in release.yml. It does two things for a tag:
 #   - mirror the release assets to the downloads R2 bucket under releases/<tag>/
-#     and refresh latest.json (the manifest the website resolves downloads from,
-#     served at https://download.escriboapp.com)
+#     and refresh latest.json, served at https://download.escriboapp.com (the
+#     website reads the GitHub release directly today, not this mirror)
 #   - publish the .deb/.rpm packages to the apt/dnf repos under the deb/ and
 #     rpm/ prefixes of the same bucket (served at https://repo.escriboapp.com)
 #
-# workflow_dispatch re-runs any of it idempotently for a given tag - use it to
-# backfill the mirror or heal a partial run.
+# Every part of it is idempotent, so it can backfill the mirror for old tags or
+# heal a partial run.
 #
 # R2 credentials come from four repo secrets: ACCESS_KEY_ID, SECRET_ACCESS_KEY,
 # ENDPOINT_URL and BUCKET_NAME.
@@ -19,8 +21,6 @@ permissions:
   contents: read
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
