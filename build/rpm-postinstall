@@ -1,7 +1,7 @@
 #!/bin/bash
-# Runs after `rpm -i` / `dnf install` of escribo (electron-builder rpm
-# afterInstall hook). Imports the escribo signing key and registers the dnf
-# repo so escribo updates through `dnf upgrade`. Idempotent; safe to re-run.
+# Runs after `rpm -i` / `dnf install` of escribo (the spec's %post, filled in
+# by bin/package-linux.sh). Imports the escribo signing key and registers the
+# dnf repo so escribo updates through `dnf upgrade`. Idempotent; safe to re-run.
 
 set -e
 

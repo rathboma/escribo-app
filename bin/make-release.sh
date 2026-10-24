@@ -1,9 +1,10 @@
 #!/bin/bash
 
-# Cut a release: bump package.json, then push a git tag. Pushing the tag is what
-# triggers .github/workflows/release.yml, which builds the installers, attaches
+# Cut a release: bump Cargo.toml, then push a git tag. Pushing the tag is what
+# triggers .github/workflows/release.yml, which builds the AppImages, attaches
 # them to a GitHub release and publishes it - at which point the website's
-# download page serves them. There is no manual step after this script.
+# download page and the in-app updaters serve them. There is no manual step
+# after this script.
 
 set -euo pipefail
 
@@ -77,7 +78,7 @@ NEW_TAG="v$VERSION"
 # Confirm with the user
 echo ""
 echo "This will:"
-echo "  - Update package.json to version: $VERSION"
+echo "  - Update Cargo.toml to version: $VERSION"
 echo "  - Push a new git tag: $NEW_TAG"
 read -p "Do you want to continue? (y/n): " CONFIRM
 
@@ -86,18 +87,19 @@ if [[ "$CONFIRM" != "y" ]]; then
   exit 0
 fi
 
-# Step 4: Update package.json if necessary
-PACKAGE_VERSION=$(jq -r '.version' package.json)
+# Step 4: Update Cargo.toml (and the lockfile's copy) if necessary
+PACKAGE_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
 if [[ "$PACKAGE_VERSION" == "$VERSION" ]]; then
-  echo "package.json is already updated to version $VERSION."
+  echo "Cargo.toml is already updated to version $VERSION."
 else
-  echo "Updating package.json..."
-  jq ".version = \"$VERSION\"" package.json > package.temp.json
-  mv package.temp.json package.json
+  echo "Updating Cargo.toml..."
+  # The first `version =` is the package's own; perl keeps this portable to macOS.
+  perl -0pi -e "s/^version = \".*?\"/version = \"$VERSION\"/m" Cargo.toml
+  cargo update --offline -p escribo >/dev/null 2>&1 || cargo update -p escribo
 
   # Commit changes
   echo "Committing changes..."
-  git add package.json
+  git add Cargo.toml Cargo.lock
   git commit -m "chore: bump version to $VERSION"
   git push
 fi

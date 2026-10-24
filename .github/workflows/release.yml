@@ -1,20 +1,21 @@
 name: Release
 
-# Runs on a pushed v* tag (create one with `yarn release` / bin/make-release.sh)
-# and takes it all the way to a public GitHub release:
+# Runs on a pushed v* tag (create one with bin/make-release.sh) and takes it
+# all the way to a public GitHub release:
 #   1. create a draft release for the tag, with generated notes
-#   2. build the installers and attach them to that draft
-#   3. publish it, once every build has landed
+#   2. build the AppImage natively on x86_64 and arm64 runners
+#   3. attach both, with their latest-linux*.yml update metadata, to the draft
+#      and publish it
 #
-# The website's /download page and the in-app updater both read the latest
-# published GitHub release, so step 3 is what makes a version downloadable.
-# Tags with a suffix (v1.2.3-beta.1) publish as prereleases, which neither of
+# The website's /download page and both in-app updaters (escribo's own, and
+# electron-updater in AppImages of the Electron 1.0.0) read the latest
+# published GitHub release, so publishing is what makes a version downloadable.
+# Tags with a suffix (v1.2.3-beta.1) publish as prereleases, which none of
 # them picks up.
 #
-# Only the Linux AppImage ships for now. macOS and Windows go back in the
-# matrix once signing and notarization are set up - their build steps below
-# are already wired and turn signing on when the secrets exist. deb/rpm/flatpak
-# need the packaging tooling and the repo publish in release-published.yml.
+# Only the AppImage ships for now. deb, rpm and Flatpak build in build.yml,
+# and ship once the repo publish in release-published.yml is set up. macOS and
+# Windows don't build yet: src/linux.rs has no counterpart for them.
 #
 # Every step is safe to re-run: the draft is reused, re-uploaded assets replace
 # the old ones, and publishing an already public release changes nothing.
@@ -44,14 +45,14 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v5
 
-      # electron-builder names the files and picks the release from the
-      # package.json version, so a tag that disagrees with it would upload
-      # into some other release.
-      - name: Check the tag matches package.json
+      # The files are named for the Cargo.toml version and the app reports it
+      # to the updaters, so a tag that disagrees with it would publish files
+      # named for some other release.
+      - name: Check the tag matches Cargo.toml
         run: |
-          version=$(node -p "require('./package.json').version")
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
           if [[ "$TAG" != "v$version" ]]; then
-            echo "::error::Tag $TAG does not match package.json version $version"
+            echo "::error::Tag $TAG does not match Cargo.toml version $version"
             exit 1
           fi
 
@@ -74,62 +75,46 @@ jobs:
 
   build:
     needs: create_draft_release
-    runs-on: ${{ matrix.os.name }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-          # One runner builds both architectures: an AppImage cross-builds
-          # cleanly, and the app has no native modules to compile.
-          - name: ubuntu-22.04
-            type: linux
-          # Back in once signing + notarization are set up:
-          # - name: windows-2022
-          #   type: windows
-          # - name: macos-14
-          #   type: macos
+        # Native builds: gpui links the system's Wayland, X11 and fontconfig
+        # libraries, which a cross-build would need a whole arm64 sysroot for.
+        # 22.04 sets the oldest glibc the AppImage runs on (2.35).
+        runner: [ubuntu-22.04, ubuntu-22.04-arm]
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v5
 
-      - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v6
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential pkg-config libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb-randr0-dev libxcb-xinput-dev libfontconfig-dev libglib2.0-dev \
+            libegl1-mesa-dev libgles2-mesa-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build the AppImage
+        run: bin/package-linux.sh appimage
+
+      # The AppImage, plus latest-linux.yml (x86_64) or latest-linux-arm64.yml.
+      # The publish job attaches them, so only it needs the release token.
+      - name: Keep the files for the publish job
+        uses: actions/upload-artifact@v6
         with:
-          node-version-file: '.nvmrc'
-          cache: yarn
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile --network-timeout 100000
-
-      # Naming the target overrides the full Linux list in package.json, which
-      # stays as it is so `yarn build` and build.yml still cover every format.
-      # This uploads the AppImages plus latest-linux*.yml, the metadata the
-      # AppImage's auto-updater reads.
-      - name: Build & upload (Linux)
-        if: matrix.os.type == 'linux'
-        run: yarn build --linux AppImage --x64 --arm64 --publish always
-
-      - name: Build & upload (Windows)
-        if: matrix.os.type == 'windows'
-        run: yarn build --win --publish always
-        env:
-          # Add WIN_CSC_LINK (base64 .pfx) + WIN_CSC_KEY_PASSWORD secrets to sign.
-          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-
-      - name: Build & upload (macOS)
-        if: matrix.os.type == 'macos'
-        run: yarn build --mac --universal --publish always
-        env:
-          # Add these secrets to sign + notarize. Until MAC_CSC_LINK is set,
-          # CSC_IDENTITY_AUTO_DISCOVERY is false so the build stays unsigned
-          # instead of failing to find an identity.
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          name: release-${{ matrix.runner }}
+          path: |
+            dist/escribo-*.AppImage
+            dist/latest-linux*.yml
+          if-no-files-found: error
 
   publish_release:
     needs: [create_draft_release, build]
@@ -137,6 +122,16 @@ jobs:
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v5
+
+      - name: Fetch the builds
+        uses: actions/download-artifact@v7
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+
+      - name: Attach them to the release
+        run: gh release upload "$TAG" dist/* --clobber
 
       # The website matches these filenames by suffix (escribo-web:
       # _data/downloads.yml), so refuse to publish a release that is missing
